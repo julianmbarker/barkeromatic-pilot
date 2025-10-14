@@ -1,21 +1,49 @@
 (function(){
-  // Boot marker so you can see JS actually ran
+  // ---- Boot marker so you can see JS actually ran
   window.addEventListener('DOMContentLoaded', function(){
     var b=document.getElementById('boot');
     if(b){ var t=new Date().toTimeString().split(' ')[0]; b.textContent='JS OK at '+t; }
     var bar=document.getElementById('bootbar'); if(bar){ bar.classList.add('show'); bar.textContent='Boot: all systems go ✅  @ '+(new Date().toLocaleTimeString()); }
   });
 
-  // Smooth inputs
+  // ---- Helpers: input behaviour & downloads
   function enhanceInput(input){
     if(!input) return;
     if(input.type==='number'){
-      input.addEventListener('wheel', e=>{ e.preventDefault(); }, {passive:false}); // stop runaway increments
+      // stop accidental increments when scrolling over number inputs
+      input.addEventListener('wheel', e=>{ e.preventDefault(); }, {passive:false});
     }
+    // allow normal text selection without dragging rows
+    input.addEventListener('mousedown', e=> e.stopPropagation());
   }
 
-  // History (Undo/Redo)
-  const KEY="bom_pilot_state_v079";
+  function timestamp(){
+    // Local time, zero-padded, safe for filenames
+    const d = new Date();
+    const z = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}-${z(d.getHours())}-${z(d.getMinutes())}`;
+  }
+  function safeName(s){
+    return (s||'barkeromatic').replace(/[^a-z0-9\-\_ ]/gi,' ').trim().replace(/\s+/g,'-').toLowerCase();
+  }
+  function download(text, name, mime){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:mime})); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
+
+  // ---- History (Undo/Redo)
+  // NOTE: keep base KEY stable so your saved data works across versions
+  const KEY="bom_pilot_state";
+  // migrate from older keys if present
+  (function migrate(){
+    try{
+      if(!localStorage.getItem(KEY)){
+        const candidates = ["bom_pilot_state_v079","bom_pilot_state_v078","bom_pilot_state_v077"];
+        for(const k of candidates){
+          const v = localStorage.getItem(k);
+          if(v){ localStorage.setItem(KEY, v); break; }
+        }
+      }
+    }catch(_){}
+  })();
+
   let historyStack=[], redoStack=[];
   function pushHistory(){ historyStack.push(JSON.stringify(state)); if(historyStack.length>100) historyStack.shift(); redoStack=[]; saved(); }
   function undo(){ if(historyStack.length===0) return; redoStack.push(JSON.stringify(state)); state=JSON.parse(historyStack.pop()); save(); renderAll(); saved(); }
@@ -25,7 +53,7 @@
     if(u) u.onclick=undo; if(r) r.onclick=redo;
   });
 
-  // State
+  // ---- State
   const def={"cycleWeeks":8,"rotaTitle":"","consultants":[],"areas":[],"alloc":{},"currentWeek":1,"monFriOnly":false};
   let state=load();
   function load(){ try{ const raw=localStorage.getItem(KEY); return raw?JSON.parse(raw):JSON.parse(JSON.stringify(def)); }catch(e){return JSON.parse(JSON.stringify(def));} }
@@ -33,7 +61,7 @@
   function toast(m){ const t=document.getElementById('toast'); if(!t) return; t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1100); }
   function saved(){ save(); const b=document.getElementById('savedBadge'); if(!b) return; b.style.opacity=.6; }
 
-  // Tabs
+  // ---- Tabs
   document.addEventListener('DOMContentLoaded', function(){
     document.querySelectorAll('.tab').forEach(b=> b.addEventListener('click', ()=>{
       document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); b.classList.add('active');
@@ -41,29 +69,42 @@
     }));
   });
 
-  // Reset
+  // ---- Reset
   document.addEventListener('DOMContentLoaded', function(){
     const btn=document.getElementById('resetApp');
     if(btn) btn.onclick=()=>{ if(confirm("Reset app and clear all data?")){ localStorage.removeItem(KEY); location.reload(); } };
   });
 
-  // Top import/export (ALL)
+  // ---- Global import/export (ALL) with auto-named filename
   document.addEventListener('DOMContentLoaded', function(){
     const ex=document.getElementById('exportTop'), im=document.getElementById('importTop');
-    if(ex) ex.onclick=()=>download(JSON.stringify(state,null,2), "barkeromatic-config.json","application/json");
+    if(ex) ex.onclick=()=> {
+      const base = safeName(state.rotaTitle || 'barkeromatic');
+      const name = `${base}-${timestamp()}.json`;
+      download(JSON.stringify(state,null,2), name, "application/json");
+    };
     if(im) im.onchange=(e)=>importAll(e.target.files[0]);
   });
 
-  // Setup bindings
+  // ---- Setup bindings
   function bindSetup(){
     const weeksSel=document.getElementById('weeks');
-    if(weeksSel && weeksSel.options.length===0){ for(let i=1;i<=15;i++){ const o=document.createElement('option'); o.value=i; o.textContent=i; weeksSel.appendChild(o); } }
+    if(weeksSel && weeksSel.options.length===0){
+      for(let i=1;i<=15;i++){ const o=document.createElement('option'); o.value=i; o.textContent=i; weeksSel.appendChild(o); }
+    }
     const rt=document.getElementById('rotaTitle');
-    if(rt){ rt.value=state.rotaTitle||""; enhanceInput(rt); rt.oninput=(e)=>{ pushHistory(); state.rotaTitle=e.target.value; renderTitle(); }; }
-    if(weeksSel){ weeksSel.value=state.cycleWeeks; weeksSel.onchange=()=>{ pushHistory(); state.cycleWeeks=Number(weeksSel.value); if(state.currentWeek>state.cycleWeeks) state.currentWeek=state.cycleWeeks; renderWeekTabs(); renderWeekTables(); renderTitle(); }; }
+    if(rt){
+      rt.value=state.rotaTitle||"";
+      enhanceInput(rt);
+      rt.oninput=(e)=>{ pushHistory(); state.rotaTitle=e.target.value; renderTitle(); };
+    }
+    if(weeksSel){
+      weeksSel.value=state.cycleWeeks;
+      weeksSel.onchange=()=>{ pushHistory(); state.cycleWeeks=Number(weeksSel.value); if(state.currentWeek>state.cycleWeeks) state.currentWeek=state.cycleWeeks; renderWeekTabs(); renderWeekTables(); renderTitle(); };
+    }
   }
 
-  // Consultants table
+  // ---- Consultants table
   function renderConsultants(){
     const tb=document.querySelector('#ctable tbody'); if(!tb) return; tb.innerHTML="";
     const ccount=document.getElementById('ccount'); if(ccount) ccount.textContent=`(${state.consultants.length})`;
@@ -80,10 +121,8 @@
       const col=tr.children[3].firstChild;
       const rm=tr.children[4].firstChild;
 
-      // editable without interfering with drag
-      [nm,ins].forEach(inp=>{
+      [nm,ins,col].forEach(inp=>{
         enhanceInput(inp);
-        inp.addEventListener('mousedown', e=> e.stopPropagation());
         inp.addEventListener('focus', ()=> handle.draggable=false);
         inp.addEventListener('blur',  ()=> handle.draggable=true);
       });
@@ -97,7 +136,7 @@
       handle.draggable=true;
       handle.addEventListener('dragstart', ev=> ev.dataTransfer.setData("text/plain", i.toString()));
       tr.addEventListener('dragover', ev=>{ ev.preventDefault(); tr.style.outline="2px dashed var(--accent)"; });
-      tr.addEventListener('dragleave', ()=> tr.style.outline="");
+      tr.addEventListener('dragleave', ()=>{ tr.style.outline=""; });
       tr.addEventListener('drop', ev=>{
         ev.preventDefault(); tr.style.outline="";
         const from=parseInt(ev.dataTransfer.getData("text/plain"));
@@ -114,7 +153,7 @@
     if(add) add.onclick=()=>{ pushHistory(); state.consultants.push({id:crypto.randomUUID(),name:`Consultant ${state.consultants.length+1}`,initials:`C${state.consultants.length+1}`,color:"#0EA5E9"}); renderConsultants(); };
   });
 
-  // Areas (DCC / Non-DCC)
+  // ---- Areas (DCC / Non-DCC)
   function renderAreas(){
     const dT=document.querySelector('#dcct tbody'), nT=document.querySelector('#ndcct tbody'); if(dT) dT.innerHTML=""; if(nT) nT.innerHTML="";
     (state.areas||[]).filter(a=>a.type==="DCC").forEach((a,idx)=>{
@@ -126,16 +165,15 @@
         <td><input type="color" value="${a.color||"#E5E7EB"}"></td>
         <td><button class="btn ghost">Remove</button></td>`;
       const handle=tr.children[0];
-      const sess=tr.children[2].firstChild, nm=tr.children[1].firstChild, pa=tr.children[3].firstChild, col=tr.children[4].firstChild, rm=tr.children[5].firstChild;
-      [nm,pa].forEach(inp=>{
+      const nm=tr.children[1].firstChild, sess=tr.children[2].firstChild, pa=tr.children[3].firstChild, col=tr.children[4].firstChild, rm=tr.children[5].firstChild;
+      [nm,pa,col].forEach(inp=>{
         enhanceInput(inp);
-        inp.addEventListener('mousedown', e=> e.stopPropagation());
         inp.addEventListener('focus', ()=> handle.draggable=false);
         inp.addEventListener('blur',  ()=> handle.draggable=true);
       });
-      if(sess) sess.value=a.session||"am";
+      sess.value=a.session||"am";
       nm.oninput=()=>{ pushHistory(); a.name=nm.value; renderWeekTables(); };
-      if(sess) sess.onchange=()=>{ pushHistory(); a.session=sess.value; renderWeekTables(); };
+      sess.onchange=()=>{ pushHistory(); a.session=sess.value; renderWeekTables(); };
       pa.oninput=()=>{ pushHistory(); a.pa=Number(pa.value||0); };
       col.oninput=()=>{ pushHistory(); a.color=col.value; renderWeekTables(); };
       rm.onclick=()=>{ pushHistory(); Object.keys(state.alloc).forEach(k=>{ if(k.startsWith(a.id+"__")) delete state.alloc[k]; }); state.areas=state.areas.filter(x=>x!==a); renderAreas(); renderWeekTables(); };
@@ -143,7 +181,7 @@
       handle.draggable=true;
       handle.addEventListener('dragstart', ev=> ev.dataTransfer.setData("text/plain", "DCC:"+idx));
       tr.addEventListener('dragover', ev=>{ ev.preventDefault(); tr.style.outline="2px dashed var(--accent)"; });
-      tr.addEventListener('dragleave', ()=> tr.style.outline="");
+      tr.addEventListener('dragleave', ()=>{ tr.style.outline=""; });
       tr.addEventListener('drop', ev=>{
         ev.preventDefault(); tr.style.outline="";
         const data=ev.dataTransfer.getData("text/plain"); if(!data.startsWith("DCC:")) return;
@@ -164,9 +202,8 @@
         <td><button class="btn ghost">Remove</button></td>`;
       const handle=tr.children[0];
       const nm=tr.children[1].firstChild, pa=tr.children[2].firstChild, col=tr.children[3].firstChild, rm=tr.children[4].firstChild;
-      [nm,pa].forEach(inp=>{
+      [nm,pa,col].forEach(inp=>{
         enhanceInput(inp);
-        inp.addEventListener('mousedown', e=> e.stopPropagation());
         inp.addEventListener('focus', ()=> handle.draggable=false);
         inp.addEventListener('blur',  ()=> handle.draggable=true);
       });
@@ -178,7 +215,7 @@
       handle.draggable=true;
       handle.addEventListener('dragstart', ev=> ev.dataTransfer.setData("text/plain", "NDC:"+idx));
       tr.addEventListener('dragover', ev=>{ ev.preventDefault(); tr.style.outline="2px dashed var(--accent)"; });
-      tr.addEventListener('dragleave', ()=> tr.style.outline="");
+      tr.addEventListener('dragleave', ()=>{ tr.style.outline=""; });
       tr.addEventListener('drop', ev=>{
         ev.preventDefault(); tr.style.outline="";
         const data=ev.dataTransfer.getData("text/plain"); if(!data.startsWith("NDC:")) return;
@@ -193,15 +230,26 @@
   }
   document.addEventListener('DOMContentLoaded', function(){
     const ad=document.getElementById('addDCC'), an=document.getElementById('addNonDCC');
-    ad.onclick=()=>{ pushHistory(); state.areas.push({id:crypto.randomUUID(),type:"DCC",name:`Theatre ${state.areas.filter(a=>a.type==="DCC").length+1}`,session:"am",pa:1,color:"#E5E7EB"}); renderAreas(); renderWeekTables(); };
-    an.onclick=()=>{ pushHistory(); state.areas.push({id:crypto.randomUUID(),type:"NonDCC",name:`Non-DCC ${state.areas.filter(a=>a.type!=="DCC").length+1}`,pa:1,color:"#FDE68A"}); renderAreas(); renderWeekTables(); };
+    if(ad) ad.onclick=()=>{ pushHistory(); state.areas.push({id:crypto.randomUUID(),type:"DCC",name:`Theatre ${state.areas.filter(a=>a.type==="DCC").length+1}`,session:"am",pa:1,color:"#E5E7EB"}); renderAreas(); renderWeekTables(); };
+    if(an) an.onclick=()=>{ pushHistory(); state.areas.push({id:crypto.randomUUID(),type:"NonDCC",name:`Non-DCC ${state.areas.filter(a=>a.type!=="DCC").length+1}`,pa:1,color:"#FDE68A"}); renderAreas(); renderWeekTables(); };
   });
 
-  // Allocation helpers
+  // ---- Allocation
   function ensureAlloc(){
-    for(const a of state.areas){ for(let w=1; w<=state.cycleWeeks; w++){ for(let d=1; d<=7; d++){ const k=`${a.id}__week${w}__day${d}`; if(!(k in state.alloc)) state.alloc[k]=null; } } }
-    Object.keys(state.alloc).forEach(k=>{ const aid=k.split("__")[0]; if(!state.areas.find(a=>a.id===aid)) delete state.alloc[k]; });
+    for(const a of state.areas){
+      for(let w=1; w<=state.cycleWeeks; w++){
+        for(let d=1; d<=7; d++){
+          const k=`${a.id}__week${w}__day${d}`;
+          if(!(k in state.alloc)) state.alloc[k]=null;
+        }
+      }
+    }
+    Object.keys(state.alloc).forEach(k=>{
+      const aid=k.split("__")[0];
+      if(!state.areas.find(a=>a.id===aid)) delete state.alloc[k];
+    });
   }
+
   function renderWeekTabs(){
     ensureAlloc();
     const wrap=document.getElementById('weekTabs'); wrap.innerHTML="";
@@ -215,11 +263,11 @@
   }
   function renderTitle(){ const base=(state.rotaTitle||"rota"); const t=document.getElementById('titleLoz'); t.textContent=`${base} — week ${state.currentWeek}`; }
 
+  // ---- Rota cells
   function pillHTML(color, initials, name){
     const safeInit=(initials||"").toUpperCase(); const safeName=name||"";
     return `<span class="pill"><span class="dot" style="background:${color}"></span><span class="txt"><span class="init">${safeInit}</span><span class="sep">—</span><span class="name">${safeName}</span></span></span>`;
   }
-
   function paintCell(td, val){
     td.innerHTML='';
     const sel=document.createElement('select');
@@ -235,7 +283,6 @@
     const c=state.consultants.find(x=>x.id===val);
     if(c){ pill.innerHTML=pillHTML(c.color||"#888", c.initials, c.name); sel.value=c.id; } else { pill.innerHTML=""; sel.value=""; }
   }
-
   function dayCell(area, d){
     const td=document.createElement('td'); td.className='rota-cell';
     const w=state.currentWeek; const key=`${area.id}__week${w}__day${d}`;
@@ -243,7 +290,7 @@
     const sel=td.querySelector('select');
     sel.onchange=()=>{
       pushHistory(); state.alloc[key]= sel.value||null;
-      // auto-fill pm if am set for same area name
+      // auto-fill pm when am set for same named area
       if(area.type==="DCC" && String(area.session||"").toLowerCase()==="am"){
         const pm = state.areas.find(a=> a.type==="DCC" && String(a.session||"").toLowerCase()==="pm" && String(a.name||"").trim().toLowerCase()===String(area.name||"").trim().toLowerCase());
         if(pm){ const pmKey=`${pm.id}__week${w}__day${d}`; if(!state.alloc[pmKey]) state.alloc[pmKey]=sel.value||null; }
@@ -253,7 +300,6 @@
     td.addEventListener('click', ()=> sel.focus());
     return td;
   }
-
   function areaRow(area, type, table){
     const tr=document.createElement('tr'); const nameTd=document.createElement('td');
     const chip=document.createElement('span'); chip.className='areachip'; chip.textContent=area.name; chip.style.background=area.color||"#E5E7EB";
@@ -265,7 +311,6 @@
     days.forEach(d=> tr.appendChild(dayCell(area, d)));
     table.appendChild(tr);
   }
-
   function renderWeekTables(){
     ensureAlloc();
     const mf=document.getElementById('mfOnly'); mf.checked=!!state.monFriOnly; mf.onchange=()=>{ state.monFriOnly=!!mf.checked; pushHistory(); renderWeekTables(); };
@@ -280,17 +325,21 @@
     wD.appendChild(tbD); wN.appendChild(tbN);
   }
 
-  // Data tab (export/import)
+  // ---- Data tab (export/import) — auto-named full export + CSV
   document.addEventListener('DOMContentLoaded', function(){
     const expAll=document.getElementById('exportAll'), impAll=document.getElementById('importAll'), expCsv=document.getElementById('exportCSV');
-    expAll.onclick=()=>download(JSON.stringify(state,null,2), "barkeromatic-config.json","application/json");
+    if(expAll) expAll.onclick=()=>{
+      const base = safeName(state.rotaTitle || 'barkeromatic');
+      const name = `${base}-${timestamp()}.json`;
+      download(JSON.stringify(state,null,2), name, "application/json");
+    };
     function importAll(file){
       if(!file) return; const r=new FileReader();
       r.onload=()=>{ try{ const next=JSON.parse(String(r.result)); pushHistory(); state=next; renderAll(); toast("Imported."); }catch(e){ alert("Import failed: "+e.message); } };
       r.readAsText(file);
     }
-    impAll.onchange=(e)=> importAll(e.target.files[0]);
-    expCsv.onclick=()=>{
+    if(impAll) impAll.onchange=(e)=> importAll(e.target.files[0]);
+    if(expCsv) expCsv.onclick=()=>{
       const header = ["week","type","area","session","day","assigned","initials","name","color_hex"];
       const rows=[header];
       for(let w=1; w<=state.cycleWeeks; w++){
@@ -309,14 +358,14 @@
         });
       }
       const csv = rows.map(r=>r.map(x=>{ x=(x==null)?"":String(x); return (/[,\n\"]/).test(x)? '\"'+x.replace(/\"/g,'\"\"')+'\"' : x; }).join(",")).join("\n");
-      download(csv, "barkeromatic-rota.csv", "text/csv");
+      const base = safeName(state.rotaTitle || 'barkeromatic');
+      download(csv, `${base}-rota-${timestamp()}.csv`, "text/csv");
     };
   });
 
-  function download(text, name, mime){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:mime})); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
   function renderAll(){ bindSetup(); renderConsultants(); renderAreas(); renderWeekTabs(); renderWeekTables(); renderTitle(); }
 
-  // Seed demo data on first run
+  // ---- Seed demo data on first run
   if((state.consultants||[]).length===0 && (state.areas||[]).length===0){
     state.consultants=[{id:crypto.randomUUID(),name:"Demo Consultant",initials:"DC",color:"#0EA5E9"}];
     state.areas=[
