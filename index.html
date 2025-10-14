@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RiSE Systems: Barker-o-matic™ v0.7.9 (No-Cache)</title>
+<meta http-equiv="Cache-Control" content="no-store" />
+<link rel='preconnect' href='https://fonts.googleapis.com'>
+<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+<link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap' rel='stylesheet'>
+<style>
+:root{--ink:#111827;--paper:#F7F7FB;--card:#FFFFFF;--accent:#6C4EE6;--muted:#6B7280;--border:#E5E7EB}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--paper);color:var(--ink)}
+.top{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:16px;justify-content:space-between;padding:14px 18px;background:#fff;border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:14px}
+.logo{background:var(--accent);color:#fff;padding:22px 26px;border-radius:18px;font-weight:900;font-size:30px;letter-spacing:.6px}
+.title{font-weight:800;font-size:18px}
+.ver{border:1px solid var(--border);border-radius:999px;padding:3px 10px;margin-left:8px;color:#6B7280;font-size:12px;white-space:nowrap}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}
+.tab{background:#f3f4f6;border:1px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;height:40px;display:inline-flex;align-items:center;font-weight:700}
+.tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.actions{display:flex;gap:8px;align-items:center;justify-content:center;min-width:420px}
+.btn,.btn-like{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:8px 12px;font-weight:700;height:40px;font-size:14px;line-height:1;display:inline-flex;align-items:center;gap:8px}
+.btn.ghost{background:#f3f4f6;color:#111;border:1px solid var(--border)}
+.btn-like input{display:none}
+.bootbar{position:sticky;top:54px;z-index:9;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;border-left:6px solid #10b981;margin:0 18px;border-radius:10px;padding:10px 12px;font-weight:800;display:none}
+.bootbar.show{display:block}
+.wrap{max-width:1600px;margin:0 auto;padding:18px}
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;margin:14px 0}
+.grid{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed}
+.grid th,.grid td{border:1px solid var(--border);padding:8px;vertical-align:top;overflow:hidden;text-overflow:ellipsis}
+.grid th{background:#FAFAFA;text-align:left}
+input,select{border:1px solid var(--border);border-radius:8px;padding:8px;font-family:inherit}
+input:focus,select:focus{outline:none;border-color:#6C4EE6;box-shadow:0 0 0 3px rgba(108,78,230,.20)}
+input[type=color]{width:42px;height:36px}
+.vstack{display:flex;flex-direction:column;gap:12px}
+.hstack{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.right{margin-left:auto}
+.drag{cursor:grab;user-select:none;width:80px}
+.drag:active{cursor:grabbing}
+.weektabs{display:grid;grid-template-columns:repeat(8,1fr);gap:10px;align-items:center}
+.weektabs button{background:#EEF2FF;border:1px solid #E0E7FF;color:#4F46E5;border-radius:14px;padding:10px 14px;font-weight:800;width:100%;text-transform:lowercase}
+.weektabs button.active{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,78,230,.2)}
+#rotaTitle{width:100%;max-width:700px}
+#wD th:first-child,#wD td:first-child,#wN th:first-child,#wN td:first-child{width:280px}
+#ctable th:first-child,#ctable td:first-child{width:80px}
+#dcct th:first-child,#dcct td:first-child,#ndcct th:first-child,#ndcct td:first-child{width:80px}
+#ctable th:nth-child(2),#ctable td:nth-child(2){width:38%}
+#ctable th:nth-child(3),#ctable td:nth-child(3){width:18%}
+#ctable th:nth-child(4),#ctable td:nth-child(4){width:16%}
+.rota-cell{position:relative;height:44px;vertical-align:middle}
+.rota-cell .pillwrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.rota-cell select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;border:1px solid var(--border);padding:6px 12px;font-weight:800;background:#fff;max-width:96%}
+.dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
+.pill .txt{display:inline-flex;gap:6px;align-items:center;min-width:0}
+.pill .init{font-weight:900;letter-spacing:.5px;flex:0 0 auto}
+.pill .sep{flex:0 0 auto}
+.pill .name{flex:1 1 auto;min-width:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rota-title{display:block;margin:10px auto 14px auto;padding:12px 18px;border-radius:999px;background:#EEF2FF;color:#4F46E5;font-size:22px;font-weight:800;text-align:center;text-transform:none}
+.tablewrap{overflow:auto}
+.session-badge{border:1px solid var(--border);border-radius:999px;padding:3px 8px;font-size:12px}
+.labelwrap{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.areachip{border-radius:999px;padding:6px 10px;font-weight:700;display:inline-block}
+.smallpill{border:1px solid var(--border);border-radius:999px;padding:2px 6px;font-size:12px}
+.footer{text-align:center;color:#6B7280;padding:14px;border-top:1px solid var(--border);background:#fff}
+.toast{position:fixed;right:16px;bottom:16px;background:#111827;color:#fff;padding:12px 14px;border-radius:12px;opacity:0;transition:opacity .3s}
+.toast.show{opacity:1}
+.toolbar{justify-content:center;margin-bottom:8px}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><div class="logo">RiSE</div>
+    <div class="title">RiSE Systems: Barker-o-matic™ <span class="ver">v0.7.9</span> <span id="boot" class="ver">Boot: waiting…</span></div>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="setup">Setup</button>
+    <button class="tab" data-tab="week">Rota</button>
+    <button class="tab" data-tab="data">Data</button>
+  </nav>
+  <div class="actions">
+    <button class="btn ghost" id="undoBtn">Undo</button>
+    <button class="btn ghost" id="redoBtn">Redo</button>
+    <button class="btn" id="exportTop">Export</button>
+    <label class="btn-like">Import<input type="file" id="importTop" accept="application/json"></label>
+  </div>
+</header>
+
+<div id="bootbar" class="bootbar">Boot: all systems go ✅</div>
+
+<main class="wrap">
+  <section id="setup" class="card">
+    <h2>Setup</h2>
+    <div class="hstack">
+      <label style="flex:1 1 50%;">Rota title<br><input id="rotaTitle" type="text" placeholder="e.g. Wythenshawe Cardiothoracic Anaesthesia & Critical Care Rota"></label>
+      <label style="flex:0 0 220px">Number of weeks in rota cycle<br><select id="weeks"></select></label>
+      <span id="savedBadge" class="ver" style="opacity:.6">Saved ✅</span>
+    </div>
+
+    <div class="card">
+      <div class="hstack"><h3>Consultants</h3><span id="ccount" class="ver"></span></div>
+      <div class="hstack toolbar">
+        <button class="btn" id="exportConsultantsJSON">Export Consultants (JSON)</button>
+        <button class="btn" id="exportConsultantsCSV">Export Consultants (CSV)</button>
+        <label class="btn-like">Import Consultants (JSON)<input type="file" id="importConsultantsJSON" accept="application/json"></label>
+        <label class="btn-like">Import Consultants (CSV)<input type="file" id="importConsultantsCSV" accept=".csv,text/csv"></label>
+      </div>
+      <table class="grid" id="ctable">
+        <thead><tr><th>#</th><th>Name</th><th>Initials</th><th>Colour</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="section-actions">
+        <button class="btn" id="addConsultant">+ Add Consultant</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hstack"><h3>Areas</h3></div>
+      <div class="vstack">
+        <div class="card">
+          <div class="hstack"><h3>DCC Areas</h3></div>
+          <table class="grid" id="dcct"><thead><tr><th>#</th><th>Name</th><th>Session</th><th>PA</th><th>Colour</th><th></th></tr></thead><tbody></tbody></table>
+          <div class="section-actions">
+            <button class="btn ghost" id="addDCC">+ Add DCC Session</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="hstack"><h3>Non-DCC Areas</h3></div>
+          <table class="grid" id="ndcct"><thead><tr><th>#</th><th>Name</th><th>PA</th><th>Colour</th><th></th></tr></thead><tbody></tbody></table>
+          <div class="section-actions">
+            <button class="btn ghost" id="addNonDCC">+ Add Non-DCC Area</button>
+          </div>
+        </div>
+      </div>
+  </section>
+
+  <section id="week" class="card" style="display:none">
+    <div class="hstack">
+      <div class="weektabs" id="weekTabs"></div>
+      <div class="right">
+        <label><input type="checkbox" id="mfOnly"> Mon–Fri only</label>
+      </div>
+    </div>
+    <h2 id="titleLoz" class="rota-title"></h2>
+    <h3 style="margin-top:0">DCC rota</h3>
+    <div class="tablewrap"><table class="grid" id="wD"></table></div>
+    <h3>Non-DCC rota</h3>
+    <div class="tablewrap"><table class="grid" id="wN"></table></div>
+  </section>
+
+  <section id="data" class="card" style="display:none">
+    <h2>Data</h2>
+    <div class="hstack" style="justify-content:center">
+      <button class="btn" id="exportAll">Export ALL (JSON)</button>
+      <label class="btn-like">Import ALL (JSON)<input type="file" id="importAll" accept="application/json"></label>
+      <button class="btn" id="exportCSV">Export Rota (CSV)</button>
+      <button class="btn ghost" id="resetApp">Reset App</button>
+    </div>
+    <p class="ver">No-cache build for reliable init. Import/export your config safely.</p>
+  </section>
+</main>
+
+<footer class="footer">© RiSE Systems 2025 · v0.7.9</footer>
+<div id="toast" class="toast"></div>
+
+<script src="app.js" defer></script>
+</body>
+</html>
