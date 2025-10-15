@@ -264,5 +264,18 @@ input[type=color]{width:42px;height:36px}
 <div id="toast" class="toast"></div>
 
 <script src="app.js?v=boot1" defer></script>
+  <script>
+  (function bootDiag(){
+    const el = document.getElementById('boot') || document.querySelector('.boot');
+    function show(msg, green){ if(!el) return; el.textContent = msg; el.style.background = green ? '#16a34a' : '#ef4444'; el.style.color = '#fff'; }
+    try {
+      if (typeof renderAll === 'function') { show('Boot: JS OK', true); }
+      else { show('Boot error: renderAll not found', false); }
+    } catch (e) {
+      show('Boot error: ' + (e && e.message ? e.message : e), false);
+    }
+    window.onerror = function(m){ show('JS error: ' + m, false); };
+  })();
+</script>
 </body>
 </html>
