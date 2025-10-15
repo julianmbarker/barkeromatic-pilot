@@ -631,10 +631,83 @@ function renderJobplans(){
   };
 }// --- Jobplans weekend toggle ---
 document.addEventListener('DOMContentLoaded', ()=>{
-  const jpWE = document.getElementById('jpWeekends');
-  if(!jpWE) return;
-  jpWE.addEventListener('change', ()=>{
-    state.jobsShowWeekends = jpWE.checked;
+const jpWE = document.getElementById('jpWeekends');
+if(jpWE){
+  jpWE.checked = !!state.jobsShowWeekends;
+  jpWE.onchange = ()=>{ pushHistory(); state.jobsShowWeekends = jpWE.checked; jpRenderConsultantRota(); };
+}
+    // === Jobplans: week tabs + per-consultant grid ===
+function jpRenderWeekTabs(){
+  const wrap=document.getElementById('jpWeekTabs');
+  if(!wrap) return;
+  wrap.innerHTML="";
+  wrap.style.display='grid';
+  wrap.style.gridTemplateColumns=`repeat(${Math.min(state.cycleWeeks,8)},1fr)`;
+
+  for(let w=1; w<=state.cycleWeeks; w++){
+    const b=document.createElement('button');
+    b.textContent="week "+w;
+    if(w===state.currentWeek) b.classList.add('active');
+    b.onclick=()=>{ pushHistory(); state.currentWeek=w; jpRenderConsultantRota(); jpRenderWeekTabs(); };
+    wrap.appendChild(b);
+  }
+}
+
+function jpRenderConsultantRota(){
+  const sel = document.getElementById('jpConsultantSelect');
+  const cId = sel ? sel.value : "";
+  const wD=document.getElementById('jpWD'), wN=document.getElementById('jpWN');
+  if(!wD || !wN) return;
+  wD.innerHTML=""; wN.innerHTML="";
+
+  const showWE = !!state.jobsShowWeekends;
+  const dayIdx = showWE ? [1,2,3,4,5,6,7] : [1,2,3,4,5];
+  const dayNames = showWE ? ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"] : ["Mon","Tue","Wed","Thu","Fri"];
+
+  // table headers
+  const mkHead = (table)=>{
+    const thead=document.createElement('thead');
+    const tr=document.createElement('tr');
+    ["Area", ...dayNames].forEach(h=>{
+      const th=document.createElement('th'); th.textContent=h; tr.appendChild(th);
+    });
+    thead.appendChild(tr); table.appendChild(thead);
+  };
+  mkHead(wD); mkHead(wN);
+
+  // one row helper
+  const week=state.currentWeek;
+  const mkRow=(a,table)=>{
+    const tr=document.createElement('tr');
+
+    const nameTd=document.createElement('td');
+    const chip=document.createElement('span'); chip.className='areachip'; chip.textContent=a.name; chip.style.background=a.color||"#E5E7EB";
+    nameTd.appendChild(chip);
+    tr.appendChild(nameTd);
+
+    dayIdx.forEach((d)=>{
+      const td=document.createElement('td'); td.className='rota-cell';
+      const key=`${a.id}__week${week}__day${d}`;
+      const v=state.alloc[key];
+      if(v && v===cId){
+        const c = state.consultants.find(x=>x.id===cId);
+        if(c){
+          // same pill style as main rota: dot + initials + name, truncates nicely
+          td.innerHTML = `<span class="pill"><span class="dot" style="background:${c.color||"#888"}"></span><span class="txt"><span class="init">${(c.initials||"").toUpperCase()}</span><span class="sep">—</span><span class="name">${c.name||""}</span></span></span>`;
+        }
+      } else {
+        td.innerHTML = "";
+      }
+      tr.appendChild(td);
+    });
+
+    table.appendChild(tr);
+  };
+
+  // build DCC then Non-DCC
+  state.areas.filter(a=>a.type==="DCC").forEach(a=> mkRow(a,wD));
+  state.areas.filter(a=>a.type!=="DCC").forEach(a=> mkRow(a,wN));
+}
     renderAll();
   });
 });
