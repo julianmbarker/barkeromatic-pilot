@@ -150,7 +150,69 @@ input[type=color]{width:42px;height:36px}
     <h3>Non-DCC rota</h3>
     <div class="tablewrap"><table class="grid" id="wN"></table></div>
   </section>
+<section id="jobs" class="card" style="display:none">
+  <div class="hstack" style="justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
+    <div style="min-width:280px;flex:1 1 360px">
+      <label>Choose consultant<br>
+        <select id="jpConsultantSelect"></select>
+      </label>
+    </div>
+    <div class="hstack">
+      <button class="btn ghost" id="exportJobplansCSV">Export Jobplans (CSV)</button>
+      <button class="btn ghost" id="exportJobplanSummaryCSV">Export Summary (CSV)</button>
+      <label class="btn-like">Import Jobplans (JSON)
+        <input type="file" id="importJobplansJSON" accept="application/json">
+      </label>
+      <button class="btn" id="exportJobplansJSON">Export Jobplans (JSON)</button>
+    </div>
+  </div>
 
+  <div class="card" id="jpSummary" style="margin-top:14px">
+    <h3>Summary</h3>
+    <div class="hstack" style="flex-wrap:wrap;gap:10px">
+      <span class="smallpill" id="jpPlannedDCC">Planned DCC: 0</span>
+      <span class="smallpill" id="jpPlannedNonDCC">Planned Non-DCC: 0</span>
+      <span class="smallpill" id="jpPlannedOncall">On-call: 0</span>
+      <span class="smallpill" id="jpPlannedTotal" style="font-weight:900">Planned Total: 0</span>
+      <span class="smallpill" id="jpActualRota">Actual rota (avg/week): 0</span>
+      <span class="smallpill" id="jpDelta">Δ (Planned − Actual): 0</span>
+      <label class="right" style="margin-left:auto">Target PAs / week
+        <input id="jpTarget" type="number" step="0.25" style="width:100px">
+      </label>
+    </div>
+  </div>
+
+  <div class="vstack">
+    <div class="card">
+      <div class="hstack" style="justify-content:space-between">
+        <h3>DCC</h3>
+        <button class="btn" id="jpAddDCC">+ Add DCC row</button>
+      </div>
+      <table class="grid" id="jpDCCT">
+        <thead><tr><th>Name</th><th>Session</th><th>PA</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="hstack" style="justify-content:space-between">
+        <h3>Non-DCC</h3>
+        <button class="btn" id="jpAddNonDCC">+ Add Non-DCC row</button>
+      </div>
+      <table class="grid" id="jpNDCCT">
+        <thead><tr><th>Name</th><th>PA</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>On-call (MVP)</h3>
+      <div class="hstack">
+        <label>PA per week <input id="jpOncallPA" type="number" step="0.25" style="width:120px"></label>
+      </div>
+    </div>
+  </div>
+</section>
   <section id="data" class="card" style="display:none">
     <h2>Data</h2>
     <div class="hstack" style="justify-content:center">
