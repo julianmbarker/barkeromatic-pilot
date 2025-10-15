@@ -54,7 +54,17 @@
   });
 
   // ---- State
-  const def={"cycleWeeks":8,"rotaTitle":"","consultants":[],"areas":[],"alloc":{},"currentWeek":1,"monFriOnly":false};
+  const def={
+  "cycleWeeks":8,
+  "rotaTitle":"",
+  "consultants":[],
+  "areas":[],
+  "alloc":{},
+  "currentWeek":1,
+  "monFriOnly":false,
+  "jobplans":{},
+  "jobsShowWeekends":false
+};
   let state=load();
   function load(){ try{ const raw=localStorage.getItem(KEY); return raw?JSON.parse(raw):JSON.parse(JSON.stringify(def)); }catch(e){return JSON.parse(JSON.stringify(def));} }
   function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -619,6 +629,14 @@ function renderJobplans(){
     const base = safeName(state.rotaTitle || 'barkeromatic');
     download(csv, `${base}-jobplan-summary-${timestamp()}.csv`, "text/csv");
   };
-}
+}// --- Jobplans weekend toggle ---
+document.addEventListener('DOMContentLoaded', ()=>{
+  const jpWE = document.getElementById('jpWeekends');
+  if(!jpWE) return;
+  jpWE.addEventListener('change', ()=>{
+    state.jobsShowWeekends = jpWE.checked;
+    renderAll();
+  });
+});
   renderAll();
 })();
