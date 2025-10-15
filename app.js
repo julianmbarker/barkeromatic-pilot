@@ -380,7 +380,9 @@
   renderWeekTabs();
   renderWeekTables();
   renderTitle();
-  renderJobplans(); // NEW
+  renderJobplans();   
+  jpRenderWeekTabs();          // NEW
+  jpRenderConsultantRota();    // NEW
 }
 
   // ---- Seed demo data on first run
