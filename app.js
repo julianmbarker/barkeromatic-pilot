@@ -363,7 +363,15 @@
     };
   });
 
-  function renderAll(){ bindSetup(); renderConsultants(); renderAreas(); renderWeekTabs(); renderWeekTables(); renderTitle(); }
+  function renderAll(){
+  bindSetup();
+  renderConsultants();
+  renderAreas();
+  renderWeekTabs();
+  renderWeekTables();
+  renderTitle();
+  renderJobplans(); // NEW
+}
 
   // ---- Seed demo data on first run
   if((state.consultants||[]).length===0 && (state.areas||[]).length===0){
@@ -373,6 +381,244 @@
       {id:crypto.randomUUID(),type:"DCC",name:"Cardiac Theatre 1",session:"pm",pa:1,color:"#C084FC"}
     ];
     save();
+  }// ===== Jobplans MVP =====
+function ensureJobplanFor(consultantId){
+  if(!state.jobplans) state.jobplans={};
+  if(!state.jobplans[consultantId]){
+    state.jobplans[consultantId] = {
+      targetPAsPerWeek: 0,
+      dcc: [],
+      nonDcc: [],
+      oncall: { paPerWeek: 0 }
+    };
   }
+  return state.jobplans[consultantId];
+}
+
+function jpCalcPlanned(cId){
+  const jp = ensureJobplanFor(cId);
+  const sum = a => (a||[]).reduce((s,x)=> s + Number(x.pa||0), 0);
+  const dcc = sum(jp.dcc);
+  const ndc = sum(jp.nonDcc);
+  const oc  = Number(jp.oncall?.paPerWeek||0);
+  return { dcc, ndc, oc, total: dcc+ndc+oc, target: Number(jp.targetPAsPerWeek||0) };
+}
+
+function jpCalcActualFromRota(cId){
+  if(!cId) return 0;
+  const weeks = Math.max(1, Number(state.cycleWeeks||1));
+  let sumWeeks = 0;
+  for(let w=1; w<=weeks; w++){
+    let weekTotal = 0;
+    for(const a of state.areas){
+      const pa = Number(a.pa||0);
+      for(let d=1; d<=7; d++){
+        const k = `${a.id}__week${w}__day${d}`;
+        const val = state.alloc[k];
+        if(val && val===cId){
+          weekTotal += pa;
+        }
+      }
+    }
+    sumWeeks += weekTotal;
+  }
+  return sumWeeks / weeks; // avg per week over cycle
+}
+
+function jpConsultantOptions(selectEl){
+  selectEl.innerHTML = "";
+  const defOpt = new Option("Select consultant…", "");
+  selectEl.appendChild(defOpt);
+  state.consultants.forEach(c=>{
+    const o = new Option((c.initials? (c.initials+" — "):"") + (c.name||""), c.id);
+    selectEl.appendChild(o);
+  });
+}
+
+function jpRenderSummary(cId){
+  const plan = jpCalcPlanned(cId);
+  const actual = jpCalcActualFromRota(cId);
+  const delta = (plan.total - actual);
+  const set = (id, txt)=>{ const el=document.getElementById(id); if(el) el.textContent=txt; };
+  set("jpPlannedDCC", `Planned DCC: ${plan.dcc}`);
+  set("jpPlannedNonDCC", `Planned Non-DCC: ${plan.ndc}`);
+  set("jpPlannedOncall", `On-call: ${plan.oc}`);
+  set("jpPlannedTotal", `Planned Total: ${plan.total}`);
+  set("jpActualRota", `Actual rota (avg/week): ${Number(actual.toFixed(2))}`);
+  const deltaEl = document.getElementById("jpDelta");
+  if(deltaEl){
+    deltaEl.textContent = `Δ (Planned − Actual): ${Number(delta.toFixed(2))}`;
+    deltaEl.style.background = (Math.abs(delta) <= 0.25) ? "#ECFDF5" : (Math.abs(delta)<=0.5 ? "#FFFBEB" : "#FEF2F2");
+  }
+}
+
+function jpBindRows(cId){
+  const jp = ensureJobplanFor(cId);
+
+  // DCC table
+  const dBody = document.querySelector("#jpDCCT tbody");
+  dBody.innerHTML = "";
+  (jp.dcc||[]).forEach((row, idx)=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input value="${row.name||""}" placeholder="e.g. Cardiac Theatre"></td>
+      <td>
+        <select>
+          <option>am</option><option>pm</option><option>eve</option><option>n/a</option>
+        </select>
+      </td>
+      <td><input type="number" step="0.25" value="${Number(row.pa||0)}" style="width:100px"></td>
+      <td><button class="btn ghost">Remove</button></td>
+    `;
+    const nm = tr.children[0].firstChild;
+    const sess = tr.children[1].firstChild;
+    const pa = tr.children[2].firstChild;
+    const rm = tr.children[3].firstChild;
+    [nm,pa,sess].forEach(enhanceInput);
+    sess.value = row.session || "am";
+    nm.oninput = ()=>{ pushHistory(); row.name = nm.value; jpRenderSummary(cId); };
+    sess.onchange = ()=>{ pushHistory(); row.session = sess.value; jpRenderSummary(cId); };
+    pa.oninput = ()=>{ pushHistory(); row.pa = Number(pa.value||0); jpRenderSummary(cId); };
+    rm.onclick = ()=>{ pushHistory(); jp.dcc.splice(idx,1); jpBindRows(cId); jpRenderSummary(cId); };
+    dBody.appendChild(tr);
+  });
+
+  // Non-DCC table
+  const nBody = document.querySelector("#jpNDCCT tbody");
+  nBody.innerHTML = "";
+  (jp.nonDcc||[]).forEach((row, idx)=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input value="${row.name||""}" placeholder="e.g. SPA / Admin / Teaching"></td>
+      <td><input type="number" step="0.25" value="${Number(row.pa||0)}" style="width:100px"></td>
+      <td><button class="btn ghost">Remove</button></td>
+    `;
+    const nm = tr.children[0].firstChild;
+    const pa = tr.children[1].firstChild;
+    const rm = tr.children[2].firstChild;
+    [nm,pa].forEach(enhanceInput);
+    nm.oninput = ()=>{ pushHistory(); row.name = nm.value; jpRenderSummary(cId); };
+    pa.oninput = ()=>{ pushHistory(); row.pa = Number(pa.value||0); jpRenderSummary(cId); };
+    rm.onclick = ()=>{ pushHistory(); jp.nonDcc.splice(idx,1); jpBindRows(cId); jpRenderSummary(cId); };
+    nBody.appendChild(tr);
+  });
+
+  // On-call
+  const on = document.getElementById("jpOncallPA");
+  if(on){
+    on.value = Number(jp.oncall?.paPerWeek||0);
+    enhanceInput(on);
+    on.oninput = ()=>{ pushHistory(); jp.oncall.paPerWeek = Number(on.value||0); jpRenderSummary(cId); };
+  }
+
+  // Target
+  const tgt = document.getElementById("jpTarget");
+  if(tgt){
+    tgt.value = Number(jp.targetPAsPerWeek||0);
+    enhanceInput(tgt);
+    tgt.oninput = ()=>{ pushHistory(); jp.targetPAsPerWeek = Number(tgt.value||0); };
+  }
+}
+
+function renderJobplans(){
+  const sel = document.getElementById("jpConsultantSelect");
+  if(!sel) return; // tab not visible in DOM
+  jpConsultantOptions(sel);
+
+  // If no selection yet, try pick first consultant
+  if(!sel.value){
+    if(state.consultants.length>0){
+      sel.value = state.consultants[0].id;
+    } else {
+      sel.value = "";
+    }
+  }
+
+  const selectHandler = ()=>{
+    const cId = sel.value;
+    if(!cId){ // nothing selected, clear tables and summary
+      ["jpDCCT","jpNDCCT"].forEach(id=>{ const tb=document.querySelector(`#${id} tbody`); if(tb) tb.innerHTML=""; });
+      ["jpPlannedDCC","jpPlannedNonDCC","jpPlannedOncall","jpPlannedTotal","jpActualRota","jpDelta"].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=""; });
+      const on=document.getElementById("jpOncallPA"); if(on) on.value="";
+      const tgt=document.getElementById("jpTarget"); if(tgt) tgt.value="";
+      return;
+    }
+    ensureJobplanFor(cId);
+    jpBindRows(cId);
+    jpRenderSummary(cId);
+  };
+
+  sel.onchange = selectHandler;
+  selectHandler(); // render immediately for current selection
+
+  // Add row buttons
+  const addD = document.getElementById("jpAddDCC");
+  const addN = document.getElementById("jpAddNonDCC");
+  if(addD) addD.onclick = ()=>{
+    if(!sel.value) return alert("Choose a consultant first.");
+    const jp = ensureJobplanFor(sel.value);
+    pushHistory();
+    jp.dcc.push({ name:"", session:"am", pa:1 });
+    jpBindRows(sel.value); jpRenderSummary(sel.value);
+  };
+  if(addN) addN.onclick = ()=>{
+    if(!sel.value) return alert("Choose a consultant first.");
+    const jp = ensureJobplanFor(sel.value);
+    pushHistory();
+    jp.nonDcc.push({ name:"", pa:0.5 });
+    jpBindRows(sel.value); jpRenderSummary(sel.value);
+  };
+
+  // Jobplans import/export
+  const exJ = document.getElementById("exportJobplansJSON");
+  const imJ = document.getElementById("importJobplansJSON");
+  const exC = document.getElementById("exportJobplansCSV");
+  const exS = document.getElementById("exportJobplanSummaryCSV");
+
+  if(exJ) exJ.onclick = ()=>{
+    const base = safeName(state.rotaTitle || "barkeromatic");
+    download(JSON.stringify(state.jobplans||{}, null, 2), `${base}-jobplans-${timestamp()}.json`, "application/json");
+  };
+  if(imJ) imJ.onchange = (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    const r = new FileReader();
+    r.onload = ()=>{
+      try{
+        const jp = JSON.parse(String(r.result));
+        pushHistory();
+        state.jobplans = jp || {};
+        renderJobplans();
+        toast("Jobplans imported.");
+      }catch(err){ alert("Import failed: "+err.message); }
+    };
+    r.readAsText(file);
+  };
+
+  if(exC) exC.onclick = ()=>{
+    const rows = [["consultant","category","name","session","pa_per_week"]];
+    state.consultants.forEach(c=>{
+      const jp = ensureJobplanFor(c.id);
+      (jp.dcc||[]).forEach(r=> rows.push([c.name||"", "DCC", r.name||"", r.session||"", Number(r.pa||0)]));
+      (jp.nonDcc||[]).forEach(r=> rows.push([c.name||"", "NonDCC", r.name||"", "", Number(r.pa||0)]));
+      rows.push([c.name||"", "OnCall", "", "", Number(jp.oncall?.paPerWeek||0)]);
+    });
+    const csv = rows.map(r=>r.map(x=>{ x=(x==null)?"":String(x); return (/[,\n\"]/).test(x)? '\"'+x.replace(/\"/g,'\"\"')+'\"' : x; }).join(",")).join("\n");
+    const base = safeName(state.rotaTitle || 'barkeromatic');
+    download(csv, `${base}-jobplans-${timestamp()}.csv`, "text/csv");
+  };
+
+  if(exS) exS.onclick = ()=>{
+    const rows = [["consultant","planned_dcc","planned_nondcc","planned_oncall","planned_total","actual_rota","delta"]];
+    state.consultants.forEach(c=>{
+      const p = jpCalcPlanned(c.id);
+      const a = jpCalcActualFromRota(c.id);
+      const d = Number((p.total - a).toFixed(2));
+      rows.push([c.name||"", p.dcc, p.ndc, p.oc, p.total, Number(a.toFixed(2)), d]);
+    });
+    const csv = rows.map(r=>r.map(x=>{ x=(x==null)?"":String(x); return (/[,\n\"]/).test(x)? '\"'+x.replace(/\"/g,'\"\"')+'\"' : x; }).join(",")).join("\n");
+    const base = safeName(state.rotaTitle || 'barkeromatic');
+    download(csv, `${base}-jobplan-summary-${timestamp()}.csv`, "text/csv");
+  };
+}
   renderAll();
 })();
