@@ -1,54 +1,45 @@
-/* RiSE Systems: Barker-o-matic™ v0.9.0 — single-file app logic
-   - Sticky rota header (in HTML/CSS)
-   - Reliable clear-to-blank in rota cells
-   - Jobplans header (pill + initials + name)
-   - Jobplans week grid for selected consultant (DCC + Non-DCC)
-   - Jobplans “Show weekends” toggle
+/* RiSE Systems: Barker-o-matic™ v0.9.1
+   - Setup page = simple editor (cycle, consultants, areas)
+   - Rota area chips fixed (pills)
+   - Rota cell clear-to-blank reliable
+   - Jobplans grid + weekends toggle
 */
 
-/* ---------- State ---------- */
 const def={
   cycleWeeks:8,
   rotaTitle:"",
-  consultants:[],        // [{id,name,initials,color}]
-  areas:[],              // [{id,type:"DCC"|"NonDCC",name,color}]
-  alloc:{},              // key: `${areaId}__week${w}__day${d}` => consultantId|"__ECL__"|null
+  consultants:[],           // [{id,name,initials,color}]
+  areas:[],                 // [{id,type:"DCC"|"NonDCC",name,color}]
+  alloc:{},                 // key: areaId__weekW__dayD => consultantId|"__ECL__"|null
   currentWeek:1,
   monFriOnly:false,
-  jobplans:{},           // reserved for future
-  jobsShowWeekends:false
+  jobplans:{},
+  jobsShowWeekends:false,
+  _jpSelectId:null
 };
 
 let state = loadState() || structuredClone(def);
-
 function saveState(){ try{ localStorage.setItem('rise.bom.state', JSON.stringify(state)); }catch(e){} }
 function loadState(){ try{ const s=localStorage.getItem('rise.bom.state'); return s?JSON.parse(s):null; }catch(e){ return null; } }
 
-/* Undo/redo (simple history) */
+/* history */
 const hist=[]; let hi=-1;
-function pushHistory(){
-  const snap=JSON.stringify(state);
-  if(hist[hi]===snap) return;
-  hist.splice(hi+1);
-  hist.push(snap); hi=hist.length-1;
-  saveState();
-}
+function pushHistory(){ const s=JSON.stringify(state); if(hist[hi]===s) return; hist.splice(hi+1); hist.push(s); hi=hist.length-1; saveState(); }
 function undo(){ if(hi>0){ hi--; state=JSON.parse(hist[hi]); renderAll(); } }
 function redo(){ if(hi<hist.length-1){ hi++; state=JSON.parse(hist[hi]); renderAll(); } }
 
-/* ---------- Helpers ---------- */
-function byId(id){ return document.getElementById(id); }
+/* helpers */
+const byId=(id)=>document.getElementById(id);
 function el(tag, attrs={}, ...kids){
   const n=document.createElement(tag);
   Object.entries(attrs).forEach(([k,v])=>{ if(k==="class") n.className=v; else if(k==="style") n.setAttribute("style",v); else n[k]=v; });
   kids.forEach(k=>{ if(typeof k==="string") n.appendChild(document.createTextNode(k)); else if(k) n.appendChild(k); });
   return n;
 }
-function pillHTML(color, initials, name){
-  return `<span class="pill"><span class="dot" style="background:${color||"#888"}"></span><span class="txt"><span class="init">${(initials||"").toUpperCase()}</span><span class="sep">—</span><span class="name">${name||""}</span></span></span>`;
-}
+const pillHTML=(color, initials, name)=>`
+  <span class="pill"><span class="dot" style="background:${color||"#888"}"></span>
+  <span class="txt"><span class="init">${(initials||"").toUpperCase()}</span><span class="sep">—</span><span class="name">${name||""}</span></span></span>`;
 
-/* ---------- Seed demo (only if totally empty) ---------- */
 (function seed(){
   if((state.consultants||[]).length===0 && (state.areas||[]).length===0){
     state.consultants=[
@@ -64,40 +55,83 @@ function pillHTML(color, initials, name){
       {id:"teach", type:"NonDCC",name:"Teaching", color:"#c7d2fe"},
       {id:"mgmt",  type:"NonDCC",name:"Management", color:"#f5d0fe"}
     ];
-    pushHistory();
   }
 })();
 
-/* ---------- UI binding (tabs) ---------- */
+/* ---------- Setup editor ---------- */
 function bindTabs(){
   const S=byId('setup'), W=byId('week'), J=byId('jobplans'), D=byId('data');
   const bS=byId('tabSetup'), bW=byId('tabWeek'), bJ=byId('tabJob'), bD=byId('tabData');
-  function show(which){
-    [S,W,J,D].forEach(s=>s.style.display='none');
-    if(which==="setup") S.style.display='';
-    if(which==="week")  W.style.display='';
-    if(which==="job")   J.style.display='';
-    if(which==="data")  D.style.display='';
+  const show=(which)=>{
+    [S,W,J,D].forEach(x=>x.style.display='none');
+    ({setup:S,week:W,job:J,data:D}[which].style.display='');
     [bS,bW,bJ,bD].forEach(b=>b.classList.remove('active'));
     ({setup:bS,week:bW,job:bJ,data:bD}[which]).classList.add('active');
-  }
+  };
   bS.onclick=()=>show('setup');
   bW.onclick=()=>show('week');
   bJ.onclick=()=>show('job');
   bD.onclick=()=>show('data');
 }
 
-/* ---------- Setup (placeholder host: keep your existing editor rendering) ---------- */
-function bindSetup(){
-  const host=byId('setupHost');
-  host.innerHTML='';
-  // Minimal summary; your existing editor JS can render richer inputs here.
-  host.appendChild(el('div',{}, el('b',{},'Cycle: '), `${state.cycleWeeks} weeks`));
-  host.appendChild(el('div',{}, el('b',{},'Consultants: '), String(state.consultants.length)));
-  host.appendChild(el('div',{}, el('b',{},'Areas: '), String(state.areas.length)));
-}
+function renderSetup(){
+  const host=byId('setupHost'); host.innerHTML='';
+  /* Cycle */
+  const cyc=el('div',{}, el('b',{},'Cycle (weeks): '),
+    Object.assign(el('input',{type:'number',min:1,max:15,value:state.cycleWeeks}),{
+      oninput:(e)=>{ pushHistory(); state.cycleWeeks=parseInt(e.target.value||'8',10); renderWeekTabs(); renderTitle(); }
+    })
+  );
+  host.appendChild(cyc);
 
-/* ---------- Week tabs + title ---------- */
+  /* Consultants editor */
+  host.appendChild(el('h3',{},'Consultants'));
+  const cTable=el('table',{class:'grid'});
+  cTable.appendChild(el('thead',{}, el('tr',{}, el('th',{},'#'), el('th',{},'Name'), el('th',{},'Initials'), el('th',{},'Colour'), el('th',{},'') )));
+  const cBody=el('tbody');
+  (state.consultants||[]).forEach((c,i)=>{
+    const tr=el('tr',{},
+      el('td',{},String(i+1)),
+      el('td',{}, Object.assign(el('input',{type:'text',value:c.name}), {oninput:(e)=>{c.name=e.target.value; pushHistory();}})),
+      el('td',{}, Object.assign(el('input',{type:'text',value:c.initials}), {oninput:(e)=>{c.initials=e.target.value; pushHistory();}})),
+      el('td',{}, Object.assign(el('input',{type:'color',value:c.color||'#888888'}), {oninput:(e)=>{c.color=e.target.value; pushHistory(); renderWeekTables(); jpRenderConsultantRota();}})),
+      el('td',{}, Object.assign(el('button',{class:'miniBtn'},'Delete'), {onclick:()=>{ pushHistory(); state.consultants.splice(i,1); renderSetup(); renderWeekTables(); jpRenderConsultantRota(); }}) )
+    );
+    cBody.appendChild(tr);
+  });
+  cTable.appendChild(cBody);
+  host.appendChild(cTable);
+  host.appendChild(Object.assign(el('button',{class:'btn'},'+ Add consultant'),{
+    onclick:()=>{ pushHistory(); state.consultants.push({id:genId(),name:'New Consultant',initials:'XX',color:'#888888'}); renderSetup(); }
+  }));
+
+  /* Areas editor */
+  host.appendChild(el('h3',{},'Areas'));
+  const aTable=el('table',{class:'grid'});
+  aTable.appendChild(el('thead',{}, el('tr',{}, el('th',{},'#'), el('th',{},'Type'), el('th',{},'Area name'), el('th',{},'Colour'), el('th',{},''))));
+  const aBody=el('tbody');
+  (state.areas||[]).forEach((a,i)=>{
+    const tr=el('tr',{},
+      el('td',{},String(i+1)),
+      el('td',{}, (()=>{
+        const s=el('select',{}, el('option',{},'DCC'), el('option',{},'NonDCC'));
+        s.value=a.type; s.onchange=(e)=>{ a.type=e.target.value; pushHistory(); renderWeekTables(); }; return s;
+      })()),
+      el('td',{}, Object.assign(el('input',{type:'text',value:a.name}), {oninput:(e)=>{a.name=e.target.value; pushHistory(); renderWeekTables();}})),
+      el('td',{}, Object.assign(el('input',{type:'color',value:a.color||'#eeeeee'}), {oninput:(e)=>{a.color=e.target.value; pushHistory(); renderWeekTables(); jpRenderConsultantRota();}})),
+      el('td',{}, Object.assign(el('button',{class:'miniBtn'},'Delete'), {onclick:()=>{ pushHistory(); state.areas.splice(i,1); renderSetup(); renderWeekTables(); jpRenderConsultantRota(); }}) )
+    );
+    aBody.appendChild(tr);
+  });
+  aTable.appendChild(aBody);
+  host.appendChild(aTable);
+  host.appendChild(Object.assign(el('button',{class:'btn'},'+ Add area'),{
+    onclick:()=>{ pushHistory(); state.areas.push({id:genId(),type:'DCC',name:'New area',color:'#eeeeee'}); renderSetup(); renderWeekTables(); }
+  }));
+}
+const genId=()=>Math.random().toString(36).slice(2,7).toUpperCase();
+
+/* ---------- Rota ---------- */
 function renderWeekTabs(){
   const wrap=byId('weekTabs'); if(!wrap) return; wrap.innerHTML='';
   const max=state.cycleWeeks||8;
@@ -115,28 +149,25 @@ function renderTitle(){
   t.textContent = name;
 }
 
-/* ---------- Rota tables ---------- */
 function renderWeekTables(){
   const wD=byId('wD'), wN=byId('wN'); if(!wD||!wN) return;
   const days=state.monFriOnly?[1,2,3,4,5]:[1,2,3,4,5,6,7];
-  const names = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].slice(0,days.length);
+  const names=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].slice(0,days.length);
 
-  function buildHead(table){
-    const thead=el('thead'), tr=el('tr');
-    ["Area", ...names].forEach(h=> tr.appendChild(el('th',{},h)));
+  function head(table){
+    const thead=el('thead'), tr=el('tr'); ["Area",...names].forEach(h=>tr.appendChild(el('th',{},h)));
     thead.appendChild(tr); table.appendChild(thead);
   }
-  function buildBody(table, areas){
+  function body(table, areas){
     const tbody=el('tbody');
     areas.forEach(a=>{
       const tr=el('tr');
-      const nameTd=el('td'); nameTd.appendChild(el('span',{class:'areachip',style:`background:${a.color||'#eee'}`}, a.name)); tr.appendChild(nameTd);
+      const nameTd=el('td');
+      nameTd.appendChild(el('span',{class:'areachip',style:`background:${a.color||'#eee'}`}, a.name));
+      tr.appendChild(nameTd);
       days.forEach(d=>{
-        const td=el('td', {class:'rota-cell'});
-        const key=`${a.id}__week${state.currentWeek}__day${d}`;
-        td.dataset.key=key;
-        paintCell(td, state.alloc[key]||"");
-        tr.appendChild(td);
+        const td=el('td',{class:'rota-cell'}); const key=`${a.id}__week${state.currentWeek}__day${d}`;
+        td.dataset.key=key; paintCell(td, state.alloc[key]||""); tr.appendChild(td);
       });
       tbody.appendChild(tr);
     });
@@ -144,29 +175,23 @@ function renderWeekTables(){
   }
 
   wD.innerHTML=''; wN.innerHTML='';
-  buildHead(wD); buildBody(wD, state.areas.filter(a=>a.type==="DCC"));
-  buildHead(wN); buildBody(wN, state.areas.filter(a=>a.type!=="DCC"));
+  head(wD); body(wD, state.areas.filter(a=>a.type==="DCC"));
+  head(wN); body(wN, state.areas.filter(a=>a.type!=="DCC"));
 }
 
-/* Paint a rota cell with select + pill, with reliable clear-to-blank */
 function paintCell(td, val){
   td.innerHTML='';
   const sel=document.createElement('select');
-
-  // explicit blank always first
   sel.appendChild(new Option("— blank —",""));
-
-  // ECL + consultants
   sel.appendChild(new Option("ECL (unfilled)","__ECL__"));
   state.consultants.forEach(c=>{
     const txt=(c.initials||"") + (c.name && c.name!==c.initials ? " — "+c.name : "");
     sel.appendChild(new Option(txt, c.id));
   });
-
   td.appendChild(sel);
   const pill=document.createElement('div'); pill.className='pillwrap'; td.appendChild(pill);
 
-  const show = (v)=>{
+  const show=(v)=>{
     if(!v){ sel.value=""; pill.innerHTML=""; return; }
     if(v==="__ECL__"){ sel.value="__ECL__"; pill.innerHTML=pillHTML("#DC2626","ECL","Unfilled"); return; }
     const c=state.consultants.find(x=>x.id===v);
@@ -176,131 +201,17 @@ function paintCell(td, val){
   show(val);
 
   sel.onchange=()=>{
-    const chosen = sel.value;
-    const key = td.dataset.key;
-    pushHistory();
-    state.alloc[key] = chosen ? chosen : null;  // blank => null
-    show(state.alloc[key]);
+    const chosen=sel.value; const key=td.dataset.key; pushHistory();
+    state.alloc[key]=chosen?chosen:null; show(state.alloc[key]);
   };
-
-  // click the pill to clear
-  pill.addEventListener('click', ()=>{
-    const key=td.dataset.key;
-    pushHistory();
-    state.alloc[key]=null;
-    sel.value="";
-    pill.innerHTML="";
+  pill.addEventListener('click',()=>{
+    const key=td.dataset.key; pushHistory(); state.alloc[key]=null; sel.value=""; pill.innerHTML="";
   });
 }
 
 /* ---------- Jobplans ---------- */
 function jpRenderHeader(cId){
-  const t = byId('jpTitle'); if(!t) return;
-  const c = state.consultants.find(x=>x.id===cId);
-  if(!c){ t.textContent=""; return; }
-  t.innerHTML = `
-    <span class="pill">
-      <span class="dot" style="background:${c.color||'#999'}"></span>
-      <span class="txt"><span class="init">${(c.initials||'').toUpperCase()}</span></span>
-    </span>
-    <span style="margin-left:8px">Jobplan for <strong>Dr ${c.name||''}</strong></span>
-  `;
-}
-
-function jpRenderWeekTabs(){
-  const wrap=byId('jpWeekTabs'); if(!wrap) return; wrap.innerHTML="";
-  wrap.style.display='grid';
-  wrap.style.gridTemplateColumns=`repeat(${Math.min(state.cycleWeeks,8)},1fr)`;
-  for(let w=1; w<=state.cycleWeeks; w++){
-    const b=el('button',{},`week ${w}`);
-    if(w===state.currentWeek) b.classList.add('active');
-    b.onclick=()=>{ pushHistory(); state.currentWeek=w; jpRenderConsultantRota(); jpRenderWeekTabs(); };
-    wrap.appendChild(b);
-  }
-}
-
-function jpRenderConsultantRota(){
-  const selId = state._jpSelectId || state.consultants[0]?.id || "";
-  const wD=byId('jpWD'), wN=byId('jpWN'); if(!wD||!wN) return;
-  wD.innerHTML=""; wN.innerHTML="";
-  const showWE = !!state.jobsShowWeekends;
-  const days = showWE ? [1,2,3,4,5,6,7] : [1,2,3,4,5];
-  const names = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].slice(0,days.length);
-
-  const mkHead = (table)=>{
-    const thead=el('thead'); const tr=el('tr');
-    ["Area", ...names].forEach(h=>tr.appendChild(el('th',{},h)));
-    thead.appendChild(tr); table.appendChild(thead);
-  };
-  mkHead(wD); mkHead(wN);
-
-  const week=state.currentWeek;
-  const mkRow=(a,table)=>{
-    const tr=el('tr');
-    const nameTd=el('td'); nameTd.appendChild(el('span',{class:'areachip',style:`background:${a.color||'#eee'}`}, a.name)); tr.appendChild(nameTd);
-    days.forEach(d=>{
-      const td=el('td',{class:'rota-cell'});
-      const key=`${a.id}__week${week}__day${d}`;
-      const v=state.alloc[key];
-      if(v && v===selId){
-        const c = state.consultants.find(x=>x.id===selId);
-        td.innerHTML = pillHTML(c?.color||"#888", c?.initials||"", c?.name||"");
-      } else {
-        td.innerHTML = "";
-      }
-      tr.appendChild(td);
-    });
-    table.appendChild(tr);
-  };
-
-  state.areas.filter(a=>a.type==="DCC").forEach(a=> mkRow(a,wD));
-  state.areas.filter(a=>a.type!=="DCC").forEach(a=> mkRow(a,wN));
-
-  jpRenderHeader(selId);
-}
-
-/* ----- renderJobplans shell (keeps your existing selector if present) ----- */
-function renderJobplans(){
-  // If your build renders a Consultant dropdown, listen for it here:
-  // We’ll remember the chosen consultant id in state._jpSelectId
-  const sel = document.querySelector('#jobplans select[data-role="jp-consultant"]');
-  if(sel){
-    if(state._jpSelectId) sel.value = state._jpSelectId;
-    sel.onchange = ()=>{ state._jpSelectId = sel.value; pushHistory(); jpRenderHeader(sel.value); jpRenderWeekTabs(); jpRenderConsultantRota(); };
-    if(!state._jpSelectId && sel.value) state._jpSelectId = sel.value;
-  }else{
-    // fallback: pick first consultant if none selected
-    if(!state._jpSelectId && state.consultants[0]) state._jpSelectId = state.consultants[0].id;
-  }
-
-  // bind weekends toggle
-  const jpWE = byId('jpWeekends');
-  if(jpWE){
-    jpWE.checked = !!state.jobsShowWeekends;
-    jpWE.onchange = ()=>{ pushHistory(); state.jobsShowWeekends = jpWE.checked; jpRenderConsultantRota(); };
-  }
-
-  jpRenderWeekTabs();
-  jpRenderConsultantRota();
-}
-
-/* ---------- Full render ---------- */
-function renderConsultants(){ /* keep your existing UI; summary only to avoid breaking */ }
-function renderAreas(){ /* keep your existing UI; summary only to avoid breaking */ }
-
-function renderAll(){
-  bindTabs();
-  bindSetup();
-  renderConsultants();
-  renderAreas();
-  renderWeekTabs();
-  renderWeekTables();
-  renderTitle();
-  renderJobplans();
-}
-
-/* ---------- Startup ---------- */
-document.addEventListener('DOMContentLoaded', ()=>{
-  pushHistory();       // capture initial
-  renderAll();
-});
+  const t=byId('jpTitle'); if(!t) return;
+  const c=state.consultants.find(x=>x.id===cId);
+  t.innerHTML = c ? `
+    <span class="pill"><span class="dot" style="background:${c.colorful
