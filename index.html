@@ -232,7 +232,20 @@ input[type=color]{width:42px;height:36px}
   <!-- Jobplans section -->
 <section id="jobplans" class="card" style="display:none">
   <h2>Jobplans</h2>
-  <label><input type="checkbox" id="jpWeekends"> Show weekends</label>
+<!-- Controls: consultant selector + Show weekends + week tabs -->
+<div id="jpControls" class="hstack" style="gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+  <label style="display:inline-flex;gap:6px;align-items:center">
+    Consultant
+    <select id="jpConsultantSelect" style="min-width:240px"></select>
+  </label>
+  <label style="display:inline-flex;gap:6px;align-items:center">
+    <input type="checkbox" id="jpWeekends"> Show weekends
+  </label>
+  <div id="jpWeekTabs" class="weektabs" style="margin-left:auto"></div>
+</div>
+<div id="jpHeader" class="card" style="margin-top:12px">
+  <h2 id="jpTitle" class="rota-title"></h2>
+</div>
   <div id="jpHeader" class="card" style="margin-top:12px">
     <h2 id="jpTitle" class="rota-title"></h2>
   </div>
