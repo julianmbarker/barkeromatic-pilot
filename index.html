@@ -74,6 +74,28 @@ input[type=color]{width:42px;height:36px}
 .tablewrap{max-height:70vh;overflow:auto;}
 .weektabs{display:grid;gap:8px;grid-auto-flow:column;grid-auto-columns:minmax(100px,1fr)}
 .weektabs button{white-space:nowrap}
+  <!-- BEGIN RiSE v0.9.0 CSS -->
+<style>
+  /* Sticky toolbars & headers */
+  .rota-sticky{position:sticky;top:0;z-index:6;background:#fff;padding:8px 0}
+  .tablewrap{max-height:70vh;overflow:auto}
+  .grid thead th{position:sticky;top:0;background:#fff;z-index:5;box-shadow:0 1px 0 #eee}
+
+  /* Week tabs */
+  .weektabs{display:grid;gap:8px;grid-auto-flow:column;grid-auto-columns:minmax(110px,1fr)}
+  .weektabs button{white-space:nowrap}
+
+  /* Pills (keep dot + initials when narrow) */
+  .pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;background:#f7f7fb}
+  .pill .dot{width:10px;height:10px;border-radius:50%}
+  .pill .txt{display:inline-flex;gap:6px;align-items:center;min-width:0}
+  .pill .init{font-weight:700}
+  .pill .sep{opacity:.4}
+  .pill .name{min-width:0;max-width:18ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  @media (max-width:900px){ .pill .name{max-width:10ch} }
+  .areachip{display:inline-block;padding:4px 10px;border-radius:999px;background:#eee}
+</style>
+<!-- END RiSE v0.9.0 CSS -->
 </style>
 </head>
 <body>
