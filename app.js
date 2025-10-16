@@ -1,311 +1,378 @@
-/* RiSE Systems: Barker-o-matic™ v0.9.1
-   - Setup page = simple editor (cycle, consultants, areas)
-   - Rota area chips fixed (pills)
-   - Rota cell clear-to-blank reliable
-   - Jobplans grid + weekends toggle
-*/
-
-const def={
-  cycleWeeks:8,
-  rotaTitle:"",
-  consultants:[],           // [{id,name,initials,color}]
-  areas:[],                 // [{id,type:"DCC"|"NonDCC",name,color}]
-  alloc:{},                 // key: areaId__weekW__dayD => consultantId|"__ECL__"|null
-  currentWeek:1,
-  monFriOnly:false,
-  jobplans:{},
-  jobsShowWeekends:false,
-  _jpSelectId:null
-};
-
-let state = loadState() || structuredClone(def);
-function saveState(){ try{ localStorage.setItem('rise.bom.state', JSON.stringify(state)); }catch(e){} }
-function loadState(){ try{ const s=localStorage.getItem('rise.bom.state'); return s?JSON.parse(s):null; }catch(e){ return null; } }
-
-/* history */
-const hist=[]; let hi=-1;
-function pushHistory(){ const s=JSON.stringify(state); if(hist[hi]===s) return; hist.splice(hi+1); hist.push(s); hi=hist.length-1; saveState(); }
-function undo(){ if(hi>0){ hi--; state=JSON.parse(hist[hi]); renderAll(); } }
-function redo(){ if(hi<hist.length-1){ hi++; state=JSON.parse(hist[hi]); renderAll(); } }
-
-/* helpers */
-const byId=(id)=>document.getElementById(id);
-function el(tag, attrs={}, ...kids){
-  const n=document.createElement(tag);
-  Object.entries(attrs).forEach(([k,v])=>{ if(k==="class") n.className=v; else if(k==="style") n.setAttribute("style",v); else n[k]=v; });
-  kids.forEach(k=>{ if(typeof k==="string") n.appendChild(document.createTextNode(k)); else if(k) n.appendChild(k); });
-  return n;
-}
-const pillHTML=(color, initials, name)=>`
-  <span class="pill"><span class="dot" style="background:${color||"#888"}"></span>
-  <span class="txt"><span class="init">${(initials||"").toUpperCase()}</span><span class="sep">—</span><span class="name">${name||""}</span></span></span>`;
-
-(function seed(){
-  if((state.consultants||[]).length===0 && (state.areas||[]).length===0){
-    state.consultants=[
-      {id:"JMB",name:"Julian Barker",initials:"JMB",color:"#ef4444"},
-      {id:"AND",name:"Andy Davies",initials:"AND",color:"#a855f7"},
-      {id:"TH", name:"Tim Hayes",initials:"TH",color:"#f59e0b"},
-      {id:"IF", name:"Igor Fedor",initials:"IF",color:"#3b82f6"}
-    ];
-    state.areas=[
-      {id:"ctccu", type:"DCC",   name:"CTCCU & MRI SICU", color:"#fca5a5"},
-      {id:"card1", type:"DCC",   name:"Cardiac Theatre 1", color:"#fde047"},
-      {id:"thor",  type:"DCC",   name:"Thoracic Theatre", color:"#86efac"},
-      {id:"teach", type:"NonDCC",name:"Teaching", color:"#c7d2fe"},
-      {id:"mgmt",  type:"NonDCC",name:"Management", color:"#f5d0fe"}
-    ];
-  }
-})();
-
-/* ---------- Tabs ---------- */
-function bindTabs(){
-  const S=byId('setup'), W=byId('week'), J=byId('jobplans'), D=byId('data');
-  const bS=byId('tabSetup'), bW=byId('tabWeek'), bJ=byId('tabJob'), bD=byId('tabData');
-  const show=(which)=>{
-    [S,W,J,D].forEach(x=>x.style.display='none');
-    ({setup:S,week:W,job:J,data:D}[which].style.display='');
-    [bS,bW,bJ,bD].forEach(b=>b.classList.remove('active'));
-    ({setup:bS,week:bW,job:bJ,data:bD}[which]).classList.add('active');
-  };
-  bS.onclick=()=>show('setup');
-  bW.onclick=()=>show('week');
-  bJ.onclick=()=>show('job');
-  bD.onclick=()=>show('data');
-}
-
-/* ---------- Setup editor ---------- */
-function renderSetup(){
-  const host=byId('setupHost'); host.innerHTML='';
-  /* Cycle */
-  const cyc=el('div',{}, el('b',{},'Cycle (weeks): '),
-    Object.assign(el('input',{type:'number',min:1,max:15,value:state.cycleWeeks}),{
-      oninput:(e)=>{ pushHistory(); state.cycleWeeks=parseInt(e.target.value||'8',10); renderWeekTabs(); renderTitle(); }
-    })
-  );
-  host.appendChild(cyc);
-
-  /* Consultants editor */
-  host.appendChild(el('h3',{},'Consultants'));
-  const cTable=el('table',{class:'grid'});
-  cTable.appendChild(el('thead',{}, el('tr',{}, el('th',{},'#'), el('th',{},'Name'), el('th',{},'Initials'), el('th',{},'Colour'), el('th',{},'') )));
-  const cBody=el('tbody');
-  (state.consultants||[]).forEach((c,i)=>{
-    const tr=el('tr',{},
-      el('td',{},String(i+1)),
-      el('td',{}, Object.assign(el('input',{type:'text',value:c.name}), {oninput:(e)=>{c.name=e.target.value; pushHistory();}})),
-      el('td',{}, Object.assign(el('input',{type:'text',value:c.initials}), {oninput:(e)=>{c.initials=e.target.value; pushHistory();}})),
-      el('td',{}, Object.assign(el('input',{type:'color',value:c.color||'#888888'}), {oninput:(e)=>{c.color=e.target.value; pushHistory(); renderWeekTables(); jpRenderConsultantRota();}})),
-      el('td',{}, Object.assign(el('button',{class:'miniBtn'},'Delete'), {onclick:()=>{ pushHistory(); state.consultants.splice(i,1); renderSetup(); renderWeekTables(); jpRenderConsultantRota(); }}) )
-    );
-    cBody.appendChild(tr);
+(function(){
+  // ---- Boot marker so you can see JS actually ran
+  window.addEventListener('DOMContentLoaded', function(){
+    var b=document.getElementById('boot');
+    if(b){ var t=new Date().toTimeString().split(' ')[0]; b.textContent='JS OK at '+t; }
+    var bar=document.getElementById('bootbar'); if(bar){ bar.classList.add('show'); bar.textContent='Boot: all systems go ✅  @ '+(new Date().toLocaleTimeString()); }
   });
-  cTable.appendChild(cBody);
-  host.appendChild(cTable);
-  host.appendChild(Object.assign(el('button',{class:'btn'},'+ Add consultant'),{
-    onclick:()=>{ pushHistory(); state.consultants.push({id:genId(),name:'New Consultant',initials:'XX',color:'#888888'}); renderSetup(); }
-  }));
 
-  /* Areas editor */
-  host.appendChild(el('h3',{},'Areas'));
-  const aTable=el('table',{class:'grid'});
-  aTable.appendChild(el('thead',{}, el('tr',{}, el('th',{},'#'), el('th',{},'Type'), el('th',{},'Area name'), el('th',{},'Colour'), el('th',{},''))));
-  const aBody=el('tbody');
-  (state.areas||[]).forEach((a,i)=>{
-    const tr=el('tr',{},
-      el('td',{},String(i+1)),
-      el('td',{}, (()=>{
-        const s=el('select',{}, el('option',{},'DCC'), el('option',{},'NonDCC'));
-        s.value=a.type; s.onchange=(e)=>{ a.type=e.target.value; pushHistory(); renderWeekTables(); }; return s;
-      })()),
-      el('td',{}, Object.assign(el('input',{type:'text',value:a.name}), {oninput:(e)=>{a.name=e.target.value; pushHistory(); renderWeekTables();}})),
-      el('td',{}, Object.assign(el('input',{type:'color',value:a.color||'#eeeeee'}), {oninput:(e)=>{a.color=e.target.value; pushHistory(); renderWeekTables(); jpRenderConsultantRota();}})),
-      el('td',{}, Object.assign(el('button',{class:'miniBtn'},'Delete'), {onclick:()=>{ pushHistory(); state.areas.splice(i,1); renderSetup(); renderWeekTables(); jpRenderConsultantRota(); }}) )
-    );
-    aBody.appendChild(tr);
-  });
-  aTable.appendChild(aBody);
-  host.appendChild(aTable);
-  host.appendChild(Object.assign(el('button',{class:'btn'},'+ Add area'),{
-    onclick:()=>{ pushHistory(); state.areas.push({id:genId(),type:'DCC',name:'New area',color:'#eeeeee'}); renderSetup(); renderWeekTables(); }
-  }));
-}
-const genId=()=>Math.random().toString(36).slice(2,7).toUpperCase();
-
-/* ---------- Rota ---------- */
-function renderWeekTabs(){
-  const wrap=byId('weekTabs'); if(!wrap) return; wrap.innerHTML='';
-  const max=state.cycleWeeks||8;
-  for(let w=1; w<=max; w++){
-    const b=el('button',{},`week ${w}`);
-    if(w===state.currentWeek) b.classList.add('active');
-    b.onclick=()=>{ pushHistory(); state.currentWeek=w; renderWeekTables(); renderTitle(); };
-    wrap.appendChild(b);
-  }
-  const mf=byId('mfOnly'); if(mf){ mf.checked=!!state.monFriOnly; mf.onchange=()=>{ pushHistory(); state.monFriOnly=mf.checked; renderWeekTables(); }; }
-}
-function renderTitle(){
-  const t=byId('titleLoz'); if(!t) return;
-  const name = state.rotaTitle ? `${state.rotaTitle} — week ${state.currentWeek}` : `week ${state.currentWeek}`;
-  t.textContent = name;
-}
-
-function renderWeekTables(){
-  const wD=byId('wD'), wN=byId('wN'); if(!wD||!wN) return;
-  const days=state.monFriOnly?[1,2,3,4,5]:[1,2,3,4,5,6,7];
-  const names=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].slice(0,days.length);
-
-  function head(table){
-    const thead=el('thead'), tr=el('tr'); ["Area",...names].forEach(h=>tr.appendChild(el('th',{},h)));
-    thead.appendChild(tr); table.appendChild(thead);
-  }
-  function body(table, areas){
-    const tbody=el('tbody');
-    areas.forEach(a=>{
-      const tr=el('tr');
-      const nameTd=el('td');
-      nameTd.appendChild(el('span',{class:'areachip',style:`background:${a.color||'#eee'}`}, a.name));
-      tr.appendChild(nameTd);
-      days.forEach(d=>{
-        const td=el('td',{class:'rota-cell'}); const key=`${a.id}__week${state.currentWeek}__day${d}`;
-        td.dataset.key=key; paintCell(td, state.alloc[key]||""); tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
+  // ---- Helpers: input behaviour & downloads
+  function enhanceInput(input){
+    if(!input) return;
+    if(input.type==='number'){
+      // stop accidental increments when scrolling over number inputs
+      input.addEventListener('wheel', e=>{ e.preventDefault(); }, {passive:false});
+    }
+    // allow normal text selection without dragging rows
+    input.addEventListener('mousedown', e=> e.stopPropagation());
   }
 
-  wD.innerHTML=''; wN.innerHTML='';
-  head(wD); body(wD, state.areas.filter(a=>a.type==="DCC"));
-  head(wN); body(wN, state.areas.filter(a=>a.type!=="DCC"));
-}
-
-function paintCell(td, val){
-  td.innerHTML='';
-  const sel=document.createElement('select');
-  sel.appendChild(new Option("— blank —",""));
-  sel.appendChild(new Option("ECL (unfilled)","__ECL__"));
-  state.consultants.forEach(c=>{
-    const txt=(c.initials||"") + (c.name && c.name!==c.initials ? " — "+c.name : "");
-    sel.appendChild(new Option(txt, c.id));
-  });
-  td.appendChild(sel);
-  const pill=document.createElement('div'); pill.className='pillwrap'; td.appendChild(pill);
-
-  const show=(v)=>{
-    if(!v){ sel.value=""; pill.innerHTML=""; return; }
-    if(v==="__ECL__"){ sel.value="__ECL__"; pill.innerHTML=pillHTML("#DC2626","ECL","Unfilled"); return; }
-    const c=state.consultants.find(x=>x.id===v);
-    if(c){ sel.value=c.id; pill.innerHTML=pillHTML(c.color||"#888", c.initials, c.name); }
-    else { sel.value=""; pill.innerHTML=""; }
-  };
-  show(val);
-
-  sel.onchange=()=>{
-    const chosen=sel.value; const key=td.dataset.key; pushHistory();
-    state.alloc[key]=chosen?chosen:null; show(state.alloc[key]);
-  };
-  pill.addEventListener('click',()=>{
-    const key=td.dataset.key; pushHistory(); state.alloc[key]=null; sel.value=""; pill.innerHTML="";
-  });
-}
-
-/* ---------- Jobplans ---------- */
-function jpRenderHeader(cId){
-  const t=byId('jpTitle'); if(!t) return;
-  const c=state.consultants.find(x=>x.id===cId);
-  t.innerHTML = c ? `
-    <span class="pill"><span class="dot" style="background:${c.color||'#999'}"></span>
-    <span class="txt"><span class="init">${(c.initials||'').toUpperCase()}</span></span></span>
-    <span style="margin-left:8px">Jobplan for <strong>Dr ${c.name||''}</strong></span>
-  ` : '';
-}
-
-function jpRenderWeekTabs(){
-  const wrap=byId('jpWeekTabs'); if(!wrap) return; wrap.innerHTML="";
-  wrap.style.display='grid';
-  wrap.style.gridTemplateColumns=`repeat(${Math.min(state.cycleWeeks,8)},1fr)`;
-  for(let w=1; w<=state.cycleWeeks; w++){
-    const b=el('button',{},`week ${w}`);
-    if(w===state.currentWeek) b.classList.add('active');
-    b.onclick=()=>{ pushHistory(); state.currentWeek=w; jpRenderConsultantRota(); jpRenderWeekTabs(); };
-    wrap.appendChild(b);
+  function timestamp(){
+    // Local time, zero-padded, safe for filenames
+    const d = new Date();
+    const z = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}-${z(d.getHours())}-${z(d.getMinutes())}`;
   }
-}
+  function safeName(s){
+    return (s||'barkeromatic').replace(/[^a-z0-9\-\_ ]/gi,' ').trim().replace(/\s+/g,'-').toLowerCase();
+  }
+  function download(text, name, mime){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:mime})); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
 
-function jpRenderConsultantRota(){
-  const selId = state._jpSelectId || state.consultants[0]?.id || "";
-  const wD=byId('jpWD'), wN=byId('jpWN'); if(!wD||!wN) return;
-  wD.innerHTML=""; wN.innerHTML="";
-  const showWE = !!state.jobsShowWeekends;
-  const days = showWE ? [1,2,3,4,5,6,7] : [1,2,3,4,5];
-  const names = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].slice(0,days.length);
-
-  const mkHead = (table)=>{
-    const thead=el('thead'); const tr=el('tr');
-    ["Area", ...names].forEach(h=>tr.appendChild(el('th',{},h)));
-    thead.appendChild(tr); table.appendChild(thead);
-  };
-  mkHead(wD); mkHead(wN);
-
-  const week=state.currentWeek;
-  const mkRow=(a,table)=>{
-    const tr=el('tr');
-    const nameTd=el('td'); nameTd.appendChild(el('span',{class:'areachip',style:`background:${a.color||'#eee'}`}, a.name)); tr.appendChild(nameTd);
-    days.forEach(d=>{
-      const td=el('td',{class:'rota-cell'});
-      const key=`${a.id}__week${week}__day${d}`;
-      const v=state.alloc[key];
-      if(v && v===selId){
-        const c = state.consultants.find(x=>x.id===selId);
-        td.innerHTML = pillHTML(c?.color||"#888", c?.initials||"", c?.name||"");
-      } else {
-        td.innerHTML = "";
+  // ---- History (Undo/Redo)
+  // NOTE: keep base KEY stable so your saved data works across versions
+  const KEY="bom_pilot_state";
+  // migrate from older keys if present
+  (function migrate(){
+    try{
+      if(!localStorage.getItem(KEY)){
+        const candidates = ["bom_pilot_state_v079","bom_pilot_state_v078","bom_pilot_state_v077"];
+        for(const k of candidates){
+          const v = localStorage.getItem(k);
+          if(v){ localStorage.setItem(KEY, v); break; }
+        }
       }
-      tr.appendChild(td);
+    }catch(_){}
+  })();
+
+  let historyStack=[], redoStack=[];
+  function pushHistory(){ historyStack.push(JSON.stringify(state)); if(historyStack.length>100) historyStack.shift(); redoStack=[]; saved(); }
+  function undo(){ if(historyStack.length===0) return; redoStack.push(JSON.stringify(state)); state=JSON.parse(historyStack.pop()); save(); renderAll(); saved(); }
+  function redo(){ if(redoStack.length===0) return; historyStack.push(JSON.stringify(state)); state=JSON.parse(redoStack.pop()); save(); renderAll(); saved(); }
+  document.addEventListener('DOMContentLoaded', function(){
+    const u=document.getElementById('undoBtn'), r=document.getElementById('redoBtn');
+    if(u) u.onclick=undo; if(r) r.onclick=redo;
+  });
+
+  // ---- State
+  const def={"cycleWeeks":8,"rotaTitle":"","consultants":[],"areas":[],"alloc":{},"currentWeek":1,"monFriOnly":false};
+  let state=load();
+  function load(){ try{ const raw=localStorage.getItem(KEY); return raw?JSON.parse(raw):JSON.parse(JSON.stringify(def)); }catch(e){return JSON.parse(JSON.stringify(def));} }
+  function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+  function toast(m){ const t=document.getElementById('toast'); if(!t) return; t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1100); }
+  function saved(){ save(); const b=document.getElementById('savedBadge'); if(!b) return; b.style.opacity=.6; }
+
+  // ---- Tabs
+  document.addEventListener('DOMContentLoaded', function(){
+    document.querySelectorAll('.tab').forEach(b=> b.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+      document.querySelectorAll('main > section').forEach(s=> s.style.display='none'); document.getElementById(b.dataset.tab).style.display='block'; renderAll();
+    }));
+  });
+
+  // ---- Reset
+  document.addEventListener('DOMContentLoaded', function(){
+    const btn=document.getElementById('resetApp');
+    if(btn) btn.onclick=()=>{ if(confirm("Reset app and clear all data?")){ localStorage.removeItem(KEY); location.reload(); } };
+  });
+
+  // ---- Global import/export (ALL) with auto-named filename
+  document.addEventListener('DOMContentLoaded', function(){
+    const ex=document.getElementById('exportTop'), im=document.getElementById('importTop');
+    if(ex) ex.onclick=()=> {
+      const base = safeName(state.rotaTitle || 'barkeromatic');
+      const name = `${base}-${timestamp()}.json`;
+      download(JSON.stringify(state,null,2), name, "application/json");
+    };
+    if(im) im.onchange=(e)=>importAll(e.target.files[0]);
+  });
+
+  // ---- Setup bindings
+  function bindSetup(){
+    const weeksSel=document.getElementById('weeks');
+    if(weeksSel && weeksSel.options.length===0){
+      for(let i=1;i<=15;i++){ const o=document.createElement('option'); o.value=i; o.textContent=i; weeksSel.appendChild(o); }
+    }
+    const rt=document.getElementById('rotaTitle');
+    if(rt){
+      rt.value=state.rotaTitle||"";
+      enhanceInput(rt);
+      rt.oninput=(e)=>{ pushHistory(); state.rotaTitle=e.target.value; renderTitle(); };
+    }
+    if(weeksSel){
+      weeksSel.value=state.cycleWeeks;
+      weeksSel.onchange=()=>{ pushHistory(); state.cycleWeeks=Number(weeksSel.value); if(state.currentWeek>state.cycleWeeks) state.currentWeek=state.cycleWeeks; renderWeekTabs(); renderWeekTables(); renderTitle(); };
+    }
+  }
+
+  // ---- Consultants table
+  function renderConsultants(){
+    const tb=document.querySelector('#ctable tbody'); if(!tb) return; tb.innerHTML="";
+    const ccount=document.getElementById('ccount'); if(ccount) ccount.textContent=`(${state.consultants.length})`;
+    state.consultants.forEach((c,i)=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td class="drag" title="drag to reorder">⋮⋮</td>
+                    <td><input value="${c.name||""}"></td>
+                    <td><input value="${c.initials||""}"></td>
+                    <td><input type="color" value="${c.color||"#0EA5E9"}"></td>
+                    <td><button class="btn ghost">Remove</button></td>`;
+      const handle=tr.children[0];
+      const nm=tr.children[1].firstChild;
+      const ins=tr.children[2].firstChild;
+      const col=tr.children[3].firstChild;
+      const rm=tr.children[4].firstChild;
+
+      [nm,ins,col].forEach(inp=>{
+        enhanceInput(inp);
+        inp.addEventListener('focus', ()=> handle.draggable=false);
+        inp.addEventListener('blur',  ()=> handle.draggable=true);
+      });
+
+      nm.oninput=()=>{ pushHistory(); c.name=nm.value; };
+      ins.oninput=()=>{ pushHistory(); c.initials=ins.value; renderWeekTables(); };
+      col.oninput=()=>{ pushHistory(); c.color=col.value; renderWeekTables(); };
+
+      if(rm) rm.onclick=()=>{ pushHistory(); state.consultants.splice(i,1); Object.keys(state.alloc).forEach(k=>{ if(state.alloc[k]===c.id) state.alloc[k]=null; }); renderConsultants(); renderWeekTables(); };
+
+      handle.draggable=true;
+      handle.addEventListener('dragstart', ev=> ev.dataTransfer.setData("text/plain", i.toString()));
+      tr.addEventListener('dragover', ev=>{ ev.preventDefault(); tr.style.outline="2px dashed var(--accent)"; });
+      tr.addEventListener('dragleave', ()=>{ tr.style.outline=""; });
+      tr.addEventListener('drop', ev=>{
+        ev.preventDefault(); tr.style.outline="";
+        const from=parseInt(ev.dataTransfer.getData("text/plain"));
+        const to=i; if(Number.isNaN(from) || from===to) return;
+        pushHistory(); const item=state.consultants.splice(from,1)[0]; state.consultants.splice(to,0,item);
+        renderConsultants(); renderWeekTables();
+      });
+
+      tb.appendChild(tr);
     });
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    const add=document.getElementById('addConsultant');
+    if(add) add.onclick=()=>{ pushHistory(); state.consultants.push({id:crypto.randomUUID(),name:`Consultant ${state.consultants.length+1}`,initials:`C${state.consultants.length+1}`,color:"#0EA5E9"}); renderConsultants(); };
+  });
+
+  // ---- Areas (DCC / Non-DCC)
+  function renderAreas(){
+    const dT=document.querySelector('#dcct tbody'), nT=document.querySelector('#ndcct tbody'); if(dT) dT.innerHTML=""; if(nT) nT.innerHTML="";
+    (state.areas||[]).filter(a=>a.type==="DCC").forEach((a,idx)=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td class="drag" title="drag to reorder">⋮⋮</td>
+        <td><input value="${a.name||""}" placeholder="e.g. Cardiac Theatre 1"></td>
+        <td><select><option>am</option><option>pm</option><option>eve</option></select></td>
+        <td><input type="number" step="0.25" value="${a.pa||1}"></td>
+        <td><input type="color" value="${a.color||"#E5E7EB"}"></td>
+        <td><button class="btn ghost">Remove</button></td>`;
+      const handle=tr.children[0];
+      const nm=tr.children[1].firstChild, sess=tr.children[2].firstChild, pa=tr.children[3].firstChild, col=tr.children[4].firstChild, rm=tr.children[5].firstChild;
+      [nm,pa,col].forEach(inp=>{
+        enhanceInput(inp);
+        inp.addEventListener('focus', ()=> handle.draggable=false);
+        inp.addEventListener('blur',  ()=> handle.draggable=true);
+      });
+      sess.value=a.session||"am";
+      nm.oninput=()=>{ pushHistory(); a.name=nm.value; renderWeekTables(); };
+      sess.onchange=()=>{ pushHistory(); a.session=sess.value; renderWeekTables(); };
+      pa.oninput=()=>{ pushHistory(); a.pa=Number(pa.value||0); };
+      col.oninput=()=>{ pushHistory(); a.color=col.value; renderWeekTables(); };
+      rm.onclick=()=>{ pushHistory(); Object.keys(state.alloc).forEach(k=>{ if(k.startsWith(a.id+"__")) delete state.alloc[k]; }); state.areas=state.areas.filter(x=>x!==a); renderAreas(); renderWeekTables(); };
+
+      handle.draggable=true;
+      handle.addEventListener('dragstart', ev=> ev.dataTransfer.setData("text/plain", "DCC:"+idx));
+      tr.addEventListener('dragover', ev=>{ ev.preventDefault(); tr.style.outline="2px dashed var(--accent)"; });
+      tr.addEventListener('dragleave', ()=>{ tr.style.outline=""; });
+      tr.addEventListener('drop', ev=>{
+        ev.preventDefault(); tr.style.outline="";
+        const data=ev.dataTransfer.getData("text/plain"); if(!data.startsWith("DCC:")) return;
+        const from=parseInt(data.split(":")[1]); const to=idx; if(from===to) return;
+        pushHistory();
+        const dcc=state.areas.filter(x=>x.type==="DCC"); const item=dcc.splice(from,1)[0]; dcc.splice(to,0,item);
+        const nd=state.areas.filter(x=>x.type!=="DCC"); state.areas=[...dcc,...nd];
+        renderAreas(); renderWeekTables();
+      });
+      dT.appendChild(tr);
+    });
+    (state.areas||[]).filter(a=>a.type!=="DCC").forEach((a,idx)=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td class="drag" title="drag to reorder">⋮⋮</td>
+        <td><input value="${a.name||""}" placeholder="e.g. Teaching"></td>
+        <td><input type="number" step="0.25" value="${a.pa||1}"></td>
+        <td><input type="color" value="${a.color||"#FDE68A"}"></td>
+        <td><button class="btn ghost">Remove</button></td>`;
+      const handle=tr.children[0];
+      const nm=tr.children[1].firstChild, pa=tr.children[2].firstChild, col=tr.children[3].firstChild, rm=tr.children[4].firstChild;
+      [nm,pa,col].forEach(inp=>{
+        enhanceInput(inp);
+        inp.addEventListener('focus', ()=> handle.draggable=false);
+        inp.addEventListener('blur',  ()=> handle.draggable=true);
+      });
+      nm.oninput=()=>{ pushHistory(); a.name=nm.value; renderWeekTables(); };
+      pa.oninput=()=>{ pushHistory(); a.pa=Number(pa.value||0); };
+      col.oninput=()=>{ pushHistory(); a.color=col.value; renderWeekTables(); };
+      rm.onclick=()=>{ pushHistory(); Object.keys(state.alloc).forEach(k=>{ if(k.startsWith(a.id+"__")) delete state.alloc[k]; }); state.areas=state.areas.filter(x=>x!==a); renderAreas(); renderWeekTables(); };
+
+      handle.draggable=true;
+      handle.addEventListener('dragstart', ev=> ev.dataTransfer.setData("text/plain", "NDC:"+idx));
+      tr.addEventListener('dragover', ev=>{ ev.preventDefault(); tr.style.outline="2px dashed var(--accent)"; });
+      tr.addEventListener('dragleave', ()=>{ tr.style.outline=""; });
+      tr.addEventListener('drop', ev=>{
+        ev.preventDefault(); tr.style.outline="";
+        const data=ev.dataTransfer.getData("text/plain"); if(!data.startsWith("NDC:")) return;
+        const from=parseInt(data.split(":")[1]); const nd=state.areas.filter(x=>x.type!=="DCC"); const to=idx; if(from===to) return;
+        pushHistory();
+        const item=nd.splice(from,1)[0]; nd.splice(to,0,item);
+        const dcc=state.areas.filter(x=>x.type==="DCC"); state.areas=[...dcc,...nd];
+        renderAreas(); renderWeekTables();
+      });
+      nT.appendChild(tr);
+    });
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    const ad=document.getElementById('addDCC'), an=document.getElementById('addNonDCC');
+    if(ad) ad.onclick=()=>{ pushHistory(); state.areas.push({id:crypto.randomUUID(),type:"DCC",name:`Theatre ${state.areas.filter(a=>a.type==="DCC").length+1}`,session:"am",pa:1,color:"#E5E7EB"}); renderAreas(); renderWeekTables(); };
+    if(an) an.onclick=()=>{ pushHistory(); state.areas.push({id:crypto.randomUUID(),type:"NonDCC",name:`Non-DCC ${state.areas.filter(a=>a.type!=="DCC").length+1}`,pa:1,color:"#FDE68A"}); renderAreas(); renderWeekTables(); };
+  });
+
+  // ---- Allocation
+  function ensureAlloc(){
+    for(const a of state.areas){
+      for(let w=1; w<=state.cycleWeeks; w++){
+        for(let d=1; d<=7; d++){
+          const k=`${a.id}__week${w}__day${d}`;
+          if(!(k in state.alloc)) state.alloc[k]=null;
+        }
+      }
+    }
+    Object.keys(state.alloc).forEach(k=>{
+      const aid=k.split("__")[0];
+      if(!state.areas.find(a=>a.id===aid)) delete state.alloc[k];
+    });
+  }
+
+  function renderWeekTabs(){
+    ensureAlloc();
+    const wrap=document.getElementById('weekTabs'); wrap.innerHTML="";
+    wrap.style.gridTemplateColumns=`repeat(${Math.min(state.cycleWeeks,8)},1fr)`;
+    for(let w=1; w<=state.cycleWeeks; w++){
+      const b=document.createElement('button'); b.textContent="week "+w;
+      if(w===state.currentWeek) b.classList.add('active');
+      b.onclick=()=>{ pushHistory(); state.currentWeek=w; renderWeekTabs(); renderWeekTables(); renderTitle(); };
+      wrap.appendChild(b);
+    }
+  }
+  function renderTitle(){ const base=(state.rotaTitle||"rota"); const t=document.getElementById('titleLoz'); t.textContent=`${base} — week ${state.currentWeek}`; }
+
+  // ---- Rota cells
+  function pillHTML(color, initials, name){
+    const safeInit=(initials||"").toUpperCase(); const safeName=name||"";
+    return `<span class="pill"><span class="dot" style="background:${color}"></span><span class="txt"><span class="init">${safeInit}</span><span class="sep">—</span><span class="name">${safeName}</span></span></span>`;
+  }
+  function paintCell(td, val){
+    td.innerHTML='';
+    const sel=document.createElement('select');
+    sel.appendChild(new Option("ECL (unfilled)","__ECL__"));
+    sel.appendChild(new Option("—",""));
+    state.consultants.forEach(c=>{
+      const txt=(c.initials||"") + (c.name && c.name!==c.initials ? " — "+c.name : "");
+      sel.appendChild(new Option(txt, c.id));
+    });
+    td.appendChild(sel);
+    const pill=document.createElement('div'); pill.className='pillwrap'; td.appendChild(pill);
+    if(val && val.startsWith && val.startsWith("__ECL__")){ pill.innerHTML=pillHTML("#DC2626","ECL","Unfilled"); sel.value="__ECL__"; return; }
+    const c=state.consultants.find(x=>x.id===val);
+    if(c){ pill.innerHTML=pillHTML(c.color||"#888", c.initials, c.name); sel.value=c.id; } else { pill.innerHTML=""; sel.value=""; }
+  }
+  function dayCell(area, d){
+    const td=document.createElement('td'); td.className='rota-cell';
+    const w=state.currentWeek; const key=`${area.id}__week${w}__day${d}`;
+    paintCell(td, state.alloc[key]||"");
+    const sel=td.querySelector('select');
+    sel.onchange=()=>{
+      pushHistory(); state.alloc[key]= sel.value||null;
+      // auto-fill pm when am set for same named area
+      if(area.type==="DCC" && String(area.session||"").toLowerCase()==="am"){
+        const pm = state.areas.find(a=> a.type==="DCC" && String(a.session||"").toLowerCase()==="pm" && String(a.name||"").trim().toLowerCase()===String(area.name||"").trim().toLowerCase());
+        if(pm){ const pmKey=`${pm.id}__week${w}__day${d}`; if(!state.alloc[pmKey]) state.alloc[pmKey]=sel.value||null; }
+      }
+      paintCell(td, state.alloc[key]||"");
+    };
+    td.addEventListener('click', ()=> sel.focus());
+    return td;
+  }
+  function areaRow(area, type, table){
+    const tr=document.createElement('tr'); const nameTd=document.createElement('td');
+    const chip=document.createElement('span'); chip.className='areachip'; chip.textContent=area.name; chip.style.background=area.color||"#E5E7EB";
+    const badge=document.createElement('span'); badge.className='session-badge'; if(type==="DCC") badge.textContent=(area.session||"am");
+    const lwrap=document.createElement('div'); lwrap.className='labelwrap';
+    const left=document.createElement('div'); left.appendChild(chip); if(type==="DCC"){ left.appendChild(document.createTextNode(" ")); left.appendChild(badge); }
+    lwrap.appendChild(left); nameTd.appendChild(lwrap); tr.appendChild(nameTd);
+    const days = state.monFriOnly ? [1,2,3,4,5] : [1,2,3,4,5,6,7];
+    days.forEach(d=> tr.appendChild(dayCell(area, d)));
     table.appendChild(tr);
-  };
-
-  state.areas.filter(a=>a.type==="DCC").forEach(a=> mkRow(a,wD));
-  state.areas.filter(a=>a.type!=="DCC").forEach(a=> mkRow(a,wN));
-
-  jpRenderHeader(selId);
-}
-
-function renderJobplans(){
-  // If you later add a <select data-role="jp-consultant">, we remember its value.
-  const sel = document.querySelector('#jobplans select[data-role="jp-consultant"]');
-  if(sel){
-    if(state._jpSelectId) sel.value = state._jpSelectId;
-    sel.onchange = ()=>{ state._jpSelectId = sel.value; pushHistory(); jpRenderHeader(sel.value); jpRenderWeekTabs(); jpRenderConsultantRota(); };
-    if(!state._jpSelectId && sel.value) state._jpSelectId = sel.value;
-  }else{
-    if(!state._jpSelectId && state.consultants[0]) state._jpSelectId = state.consultants[0].id;
+  }
+  function renderWeekTables(){
+    ensureAlloc();
+    const mf=document.getElementById('mfOnly'); mf.checked=!!state.monFriOnly; mf.onchange=()=>{ state.monFriOnly=!!mf.checked; pushHistory(); renderWeekTables(); };
+    const dHead=["Area"], nHead=["Area"]; const days = state.monFriOnly ? ["Mon","Tue","Wed","Thu","Fri"] : ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+    days.forEach(x=>{ dHead.push(x); nHead.push(x); });
+    const wD=document.getElementById('wD'), wN=document.getElementById('wN'); wD.innerHTML=""; wN.innerHTML="";
+    const thD=document.createElement('thead'); const trD=document.createElement('tr'); dHead.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; trD.appendChild(th); }); thD.appendChild(trD); wD.appendChild(thD);
+    const thN=document.createElement('thead'); const trN=document.createElement('tr'); nHead.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; trN.appendChild(th); }); thN.appendChild(trN); wN.appendChild(thN);
+    const tbD=document.createElement('tbody'); const tbN=document.createElement('tbody');
+    state.areas.filter(a=>a.type==="DCC").forEach(a=> areaRow(a,"DCC",tbD));
+    state.areas.filter(a=>a.type!=="DCC").forEach(a=> areaRow(a,"NonDCC",tbN));
+    wD.appendChild(tbD); wN.appendChild(tbN);
   }
 
-  const jpWE = byId('jpWeekends');
-  if(jpWE){
-    jpWE.checked = !!state.jobsShowWeekends;
-    jpWE.onchange = ()=>{ pushHistory(); state.jobsShowWeekends = jpWE.checked; jpRenderConsultantRota(); };
+  // ---- Data tab (export/import) — auto-named full export + CSV
+  document.addEventListener('DOMContentLoaded', function(){
+    const expAll=document.getElementById('exportAll'), impAll=document.getElementById('importAll'), expCsv=document.getElementById('exportCSV');
+    if(expAll) expAll.onclick=()=>{
+      const base = safeName(state.rotaTitle || 'barkeromatic');
+      const name = `${base}-${timestamp()}.json`;
+      download(JSON.stringify(state,null,2), name, "application/json");
+    };
+    function importAll(file){
+      if(!file) return; const r=new FileReader();
+      r.onload=()=>{ try{ const next=JSON.parse(String(r.result)); pushHistory(); state=next; renderAll(); toast("Imported."); }catch(e){ alert("Import failed: "+e.message); } };
+      r.readAsText(file);
+    }
+    if(impAll) impAll.onchange=(e)=> importAll(e.target.files[0]);
+    if(expCsv) expCsv.onclick=()=>{
+      const header = ["week","type","area","session","day","assigned","initials","name","color_hex"];
+      const rows=[header];
+      for(let w=1; w<=state.cycleWeeks; w++){
+        state.areas.forEach(a=>{
+          for(let d=1; d<=7; d++){
+            const key=`${a.id}__week${w}__day${d}`;
+            const val=state.alloc[key]||"";
+            if(val && val.startsWith && val.startsWith("__ECL__")){
+              rows.push([w, a.type, a.name, (a.session||""), ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][d-1], "ECL", "", "", ""]);
+            }else{
+              const c = state.consultants.find(x=>x.id===val);
+              rows.push([w, a.type, a.name, (a.session||""), ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][d-1],
+                         c? (c.initials||"") : "", c? (c.name||"") : "", c? String(c.color||"").replace("#","") : ""]);
+            }
+          }
+        });
+      }
+      const csv = rows.map(r=>r.map(x=>{ x=(x==null)?"":String(x); return (/[,\n\"]/).test(x)? '\"'+x.replace(/\"/g,'\"\"')+'\"' : x; }).join(",")).join("\n");
+      const base = safeName(state.rotaTitle || 'barkeromatic');
+      download(csv, `${base}-rota-${timestamp()}.csv`, "text/csv");
+    };
+  });
+
+  function renderAll(){ bindSetup(); renderConsultants(); renderAreas(); renderWeekTabs(); renderWeekTables(); renderTitle(); }
+
+  // ---- Seed demo data on first run
+  if((state.consultants||[]).length===0 && (state.areas||[]).length===0){
+    state.consultants=[{id:crypto.randomUUID(),name:"Demo Consultant",initials:"DC",color:"#0EA5E9"}];
+    state.areas=[
+      {id:crypto.randomUUID(),type:"DCC",name:"Cardiac Theatre 1",session:"am",pa:1,color:"#C084FC"},
+      {id:crypto.randomUUID(),type:"DCC",name:"Cardiac Theatre 1",session:"pm",pa:1,color:"#C084FC"}
+    ];
+    save();
   }
-
-  jpRenderWeekTabs();
-  jpRenderConsultantRota();
-}
-
-/* ---------- Full render ---------- */
-function renderAll(){
-  bindTabs();
-  renderSetup();
-  renderWeekTabs();
-  renderWeekTables();
-  renderTitle();
-  renderJobplans();
-}
-
-/* ---------- Startup ---------- */
-document.addEventListener('DOMContentLoaded', ()=>{
-  pushHistory();       // capture initial
   renderAll();
-});
+})();
