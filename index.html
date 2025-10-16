@@ -68,6 +68,12 @@ input[type=color]{width:42px;height:36px}
 .toast{position:fixed;right:16px;bottom:16px;background:#111827;color:#fff;padding:12px 14px;border-radius:12px;opacity:0;transition:opacity .3s}
 .toast.show{opacity:1}
 .toolbar{justify-content:center;margin-bottom:8px}
+  /* Sticky toolbars & headers */
+.rota-sticky{position:sticky;top:0;z-index:6;background:#fff;padding:8px 0;}
+.grid thead th{position:sticky;top:0;background:#fff;z-index:5;box-shadow:0 1px 0 #eee;}
+.tablewrap{max-height:70vh;overflow:auto;}
+.weektabs{display:grid;gap:8px;grid-auto-flow:column;grid-auto-columns:minmax(100px,1fr)}
+.weektabs button{white-space:nowrap}
 </style>
 </head>
 <body>
@@ -138,6 +144,12 @@ input[type=color]{width:42px;height:36px}
   </section>
 
   <section id="week" class="card" style="display:none">
+      <div class="rota-sticky" style="display:flex;gap:12px;align-items:center;justify-content:space-between">
+    <div class="weektabs" id="weekTabs"></div>
+    <div class="right">
+      <label><input type="checkbox" id="mfOnly"> Mon–Fri only</label>
+    </div>
+  </div>
     <div class="hstack">
       <div class="weektabs" id="weekTabs"></div>
       <div class="right">
@@ -223,11 +235,34 @@ input[type=color]{width:42px;height:36px}
     </div>
     <p class="ver">No-cache build for reliable init. Import/export your config safely.</p>
   </section>
+  <!-- Jobplans section -->
+<section id="jobplans" class="card" style="display:none">
+  <h2>Jobplans</h2>
+  <label><input type="checkbox" id="jpWeekends"> Show weekends</label>
+  <div id="jpHeader" class="card" style="margin-top:12px">
+    <h2 id="jpTitle" class="rota-title"></h2>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="hstack" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <h3 style="margin:0">Consultant rota view</h3>
+      <div class="hstack" style="gap:12px;align-items:center">
+        <div id="jpWeekTabs" class="weektabs"></div>
+      </div>
+    </div>
+
+    <h3 class="margin-top:8px">DCC rota</h3>
+    <div class="tablewrap"><table class="grid" id="jpWD"></table></div>
+
+    <h3 style="margin-top:16px">Non-DCC rota</h3>
+    <div class="tablewrap"><table class="grid" id="jpWN"></table></div>
+  </div>
+</section>
 </main>
 
 <footer class="footer">© RiSE Systems 2025 · v0.8.1</footer>
 <div id="toast" class="toast"></div>
 
-<script src="app.js" defer></script>
+<script src="app.js?v=boot1" defer></script>
 </body>
 </html>
