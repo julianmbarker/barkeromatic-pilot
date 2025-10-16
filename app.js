@@ -58,7 +58,7 @@ const pillHTML=(color, initials, name)=>`
   }
 })();
 
-/* ---------- Setup editor ---------- */
+/* ---------- Tabs ---------- */
 function bindTabs(){
   const S=byId('setup'), W=byId('week'), J=byId('jobplans'), D=byId('data');
   const bS=byId('tabSetup'), bW=byId('tabWeek'), bJ=byId('tabJob'), bD=byId('tabData');
@@ -74,6 +74,7 @@ function bindTabs(){
   bD.onclick=()=>show('data');
 }
 
+/* ---------- Setup editor ---------- */
 function renderSetup(){
   const host=byId('setupHost'); host.innerHTML='';
   /* Cycle */
@@ -214,4 +215,97 @@ function jpRenderHeader(cId){
   const t=byId('jpTitle'); if(!t) return;
   const c=state.consultants.find(x=>x.id===cId);
   t.innerHTML = c ? `
-    <span class="pill"><span class="dot" style="background:${c.colorful
+    <span class="pill"><span class="dot" style="background:${c.color||'#999'}"></span>
+    <span class="txt"><span class="init">${(c.initials||'').toUpperCase()}</span></span></span>
+    <span style="margin-left:8px">Jobplan for <strong>Dr ${c.name||''}</strong></span>
+  ` : '';
+}
+
+function jpRenderWeekTabs(){
+  const wrap=byId('jpWeekTabs'); if(!wrap) return; wrap.innerHTML="";
+  wrap.style.display='grid';
+  wrap.style.gridTemplateColumns=`repeat(${Math.min(state.cycleWeeks,8)},1fr)`;
+  for(let w=1; w<=state.cycleWeeks; w++){
+    const b=el('button',{},`week ${w}`);
+    if(w===state.currentWeek) b.classList.add('active');
+    b.onclick=()=>{ pushHistory(); state.currentWeek=w; jpRenderConsultantRota(); jpRenderWeekTabs(); };
+    wrap.appendChild(b);
+  }
+}
+
+function jpRenderConsultantRota(){
+  const selId = state._jpSelectId || state.consultants[0]?.id || "";
+  const wD=byId('jpWD'), wN=byId('jpWN'); if(!wD||!wN) return;
+  wD.innerHTML=""; wN.innerHTML="";
+  const showWE = !!state.jobsShowWeekends;
+  const days = showWE ? [1,2,3,4,5,6,7] : [1,2,3,4,5];
+  const names = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].slice(0,days.length);
+
+  const mkHead = (table)=>{
+    const thead=el('thead'); const tr=el('tr');
+    ["Area", ...names].forEach(h=>tr.appendChild(el('th',{},h)));
+    thead.appendChild(tr); table.appendChild(thead);
+  };
+  mkHead(wD); mkHead(wN);
+
+  const week=state.currentWeek;
+  const mkRow=(a,table)=>{
+    const tr=el('tr');
+    const nameTd=el('td'); nameTd.appendChild(el('span',{class:'areachip',style:`background:${a.color||'#eee'}`}, a.name)); tr.appendChild(nameTd);
+    days.forEach(d=>{
+      const td=el('td',{class:'rota-cell'});
+      const key=`${a.id}__week${week}__day${d}`;
+      const v=state.alloc[key];
+      if(v && v===selId){
+        const c = state.consultants.find(x=>x.id===selId);
+        td.innerHTML = pillHTML(c?.color||"#888", c?.initials||"", c?.name||"");
+      } else {
+        td.innerHTML = "";
+      }
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  };
+
+  state.areas.filter(a=>a.type==="DCC").forEach(a=> mkRow(a,wD));
+  state.areas.filter(a=>a.type!=="DCC").forEach(a=> mkRow(a,wN));
+
+  jpRenderHeader(selId);
+}
+
+function renderJobplans(){
+  // If you later add a <select data-role="jp-consultant">, we remember its value.
+  const sel = document.querySelector('#jobplans select[data-role="jp-consultant"]');
+  if(sel){
+    if(state._jpSelectId) sel.value = state._jpSelectId;
+    sel.onchange = ()=>{ state._jpSelectId = sel.value; pushHistory(); jpRenderHeader(sel.value); jpRenderWeekTabs(); jpRenderConsultantRota(); };
+    if(!state._jpSelectId && sel.value) state._jpSelectId = sel.value;
+  }else{
+    if(!state._jpSelectId && state.consultants[0]) state._jpSelectId = state.consultants[0].id;
+  }
+
+  const jpWE = byId('jpWeekends');
+  if(jpWE){
+    jpWE.checked = !!state.jobsShowWeekends;
+    jpWE.onchange = ()=>{ pushHistory(); state.jobsShowWeekends = jpWE.checked; jpRenderConsultantRota(); };
+  }
+
+  jpRenderWeekTabs();
+  jpRenderConsultantRota();
+}
+
+/* ---------- Full render ---------- */
+function renderAll(){
+  bindTabs();
+  renderSetup();
+  renderWeekTabs();
+  renderWeekTables();
+  renderTitle();
+  renderJobplans();
+}
+
+/* ---------- Startup ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  pushHistory();       // capture initial
+  renderAll();
+});
