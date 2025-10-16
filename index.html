@@ -2,12 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>RiSE Systems: Barker-o-matic™ v0.9.0</title>
+  <title>RiSE Systems: Barker-o-matic™ v0.9.1</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- BEGIN RiSE v0.9.0 CSS -->
+
+  <!-- RiSE v0.9.1 CSS -->
   <style>
     :root{--purple:#6b4fd8;--ink:#0f172a}
-    *{box-sizing:border-box} body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial;color:var(--ink);background:#fafbff}
+    *{box-sizing:border-box}
+    body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial;color:var(--ink);background:#fafbff}
     .wrap{max-width:1100px;margin:0 auto;padding:16px}
     header{display:flex;align-items:center;gap:14px;margin:6px 0 10px 0}
     .logo{width:56px;height:56px;border-radius:16px;background:var(--purple);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:20px}
@@ -15,19 +17,25 @@
     .ver{opacity:.55}
     .boot{display:inline-block;border-radius:999px;padding:6px 12px;background:#e5e7eb;color:#111;font-weight:700}
     nav{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px}
-    nav button, .btn{border:0;border-radius:999px;padding:8px 14px;background:#ececff;color:#1f2560;font-weight:700;cursor:pointer}
+    nav button,.btn{border:0;border-radius:999px;padding:8px 14px;background:#ececff;color:#1f2560;font-weight:700;cursor:pointer}
     nav button.active{background:var(--purple);color:#fff}
     .card{background:#fff;border:1px solid #eceef7;border-radius:14px;padding:14px;margin:10px 0}
     .hstack{display:flex;gap:10px;align-items:center}
     .right{margin-left:auto}
+
+    /* Tables */
     .grid{width:100%;border-collapse:separate;border-spacing:0}
     .grid th,.grid td{border:1px solid #e7e7f3;padding:8px 10px;vertical-align:middle}
     .grid th{background:#fafafe;text-align:left}
     .tablewrap{max-height:70vh;overflow:auto}
+    .grid thead th{position:sticky;top:0;background:#fff;z-index:5;box-shadow:0 1px 0 #eee}
+
+    /* Week tabs + sticky bar */
     .weektabs{display:grid;gap:8px;grid-auto-flow:column;grid-auto-columns:minmax(110px,1fr)}
     .weektabs button{white-space:nowrap}
     .rota-sticky{position:sticky;top:0;z-index:6;background:#fff;padding:8px 0}
-    .grid thead th{position:sticky;top:0;background:#fff;z-index:5;box-shadow:0 1px 0 #eee}
+
+    /* Pills (consultants) */
     .pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;background:#f7f7fb}
     .pill .dot{width:10px;height:10px;border-radius:50%}
     .pill .txt{display:inline-flex;gap:6px;align-items:center;min-width:0}
@@ -36,17 +44,26 @@
     .pill .name{min-width:0;max-width:18ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     @media (max-width:900px){ .pill .name{max-width:10ch} }
     .pillwrap{cursor:pointer}
-    .areachip{display:inline-block;padding:4px 10px;border-radius:999px;background:#eee}
+
+    /* Area chips (ALWAYS pills; never circles) */
+    .areachip{
+      display:inline-flex; align-items:center; justify-content:center;
+      padding:6px 12px; border-radius:999px; background:#eee;
+      line-height:1.1; white-space:nowrap; max-width:22ch; overflow:hidden; text-overflow:ellipsis
+    }
+
     .footer{opacity:.6;margin:10px 0 30px}
+    input[type="color"]{border:1px solid #e5e7eb;border-radius:8px;padding:0;height:28px;width:42px}
+    input[type="text"], input[type="number"], select{border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px}
+    .miniBtn{border:1px solid #e5e7eb;background:#fff;border-radius:8px;padding:4px 8px;cursor:pointer}
   </style>
-  <!-- END RiSE v0.9.0 CSS -->
 </head>
 <body>
   <div class="wrap">
     <header>
       <div class="logo">RiSE</div>
       <div class="title">RiSE Systems: Barker-o-matic™</div>
-      <div class="ver">v0.9.0</div>
+      <div class="ver">v0.9.1</div>
       <span id="boot" class="boot">Boot: waiting…</span>
       <div class="right"></div>
     </header>
@@ -59,13 +76,13 @@
       <span class="right"></span>
     </nav>
 
-    <!-- Setup (lightweight shell: JS populates content you already have) -->
+    <!-- Setup editor -->
     <section id="setup" class="card">
       <h2>Setup</h2>
       <div id="setupHost"><em>Loading setup…</em></div>
     </section>
 
-    <!-- BEGIN RiSE v0.9.0 ROTA -->
+    <!-- Rota -->
     <section id="week" class="card" style="display:none">
       <div class="rota-sticky" style="display:flex;gap:12px;align-items:center;justify-content:space-between">
         <div class="weektabs" id="weekTabs"></div>
@@ -82,9 +99,8 @@
       <h3 style="margin-top:16px">Non-DCC rota</h3>
       <div class="tablewrap"><table class="grid" id="wN"></table></div>
     </section>
-    <!-- END RiSE v0.9.0 ROTA -->
 
-    <!-- BEGIN RiSE v0.9.0 JOBPLANS -->
+    <!-- Jobplans -->
     <section id="jobplans" class="card" style="display:none">
       <h2>Jobplans</h2>
       <label style="display:inline-flex;gap:8px;align-items:center">
@@ -108,32 +124,28 @@
         <div class="tablewrap"><table class="grid" id="jpWN"></table></div>
       </div>
     </section>
-    <!-- END RiSE v0.9.0 JOBPLANS -->
 
     <section id="data" class="card" style="display:none">
       <h2>Data</h2>
       <p>No-cache build for reliable init. Use Export/Import to move your config safely.</p>
     </section>
 
-    <footer class="footer">© RiSE Systems 2025 · v0.9.0</footer>
+    <footer class="footer">© RiSE Systems 2025 · v0.9.1</footer>
   </div>
 
-  <!-- App (cache-busted so new JS always loads) -->
-  <script src="app.js?v=090" defer></script>
+  <!-- App (cache-busted) -->
+  <script src="app.js?v=091" defer></script>
 
-  <!-- Tiny boot diagnostic so we always see why it fails, if it fails -->
+  <!-- Boot diagnostic -->
   <script>
     (function(){
       const el = document.getElementById('boot');
-      function ok(msg){ el.textContent = msg; el.style.background='#16a34a'; el.style.color='#fff'; }
-      function bad(msg){ el.textContent = msg; el.style.background='#ef4444'; el.style.color='#fff'; }
-      window.addEventListener('DOMContentLoaded', ()=>{
-        setTimeout(()=>{
-          if(typeof window.renderAll === 'function'){ ok('JS OK'); }
-          else { bad('JS error: renderAll not found'); }
-        }, 10);
-      });
-      window.onerror = function(m){ bad('JS error: ' + m); };
+      const ok =(m)=>{el.textContent=m;el.style.background='#16a34a';el.style.color='#fff'};
+      const bad=(m)=>{el.textContent=m;el.style.background='#ef4444';el.style.color='#fff'};
+      window.addEventListener('DOMContentLoaded',()=>setTimeout(()=>(
+        typeof window.renderAll==='function'?ok('JS OK'):bad('JS error: renderAll not found')
+      ),10));
+      window.onerror=(m)=>bad('JS error: '+m);
     })();
   </script>
 </body>
