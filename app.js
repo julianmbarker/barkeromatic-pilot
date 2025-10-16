@@ -54,7 +54,9 @@
   });
 
   // ---- State
-  const def={"cycleWeeks":8,"rotaTitle":"","consultants":[],"areas":[],"alloc":{},"currentWeek":1,"monFriOnly":false};
+  const def={"cycleWeeks":8,"rotaTitle":"","consultants":[],"areas":[],"alloc":{},"currentWeek":1,"monFriOnly":false,
+"jobsShowWeekends":false,
+"_jpSelectId":null};
   let state=load();
   function load(){ try{ const raw=localStorage.getItem(KEY); return raw?JSON.parse(raw):JSON.parse(JSON.stringify(def)); }catch(e){return JSON.parse(JSON.stringify(def));} }
   function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -374,5 +376,211 @@
     ];
     save();
   }
+  // ===== JOBPLANS HELPERS =====
+function jpEnsureConsultantSelect(){
+  const sel = document.getElementById('jpConsultantSelect');
+  if(!sel) return null;
+  // populate
+  const prev = state._jpSelectId;
+  sel.innerHTML = '';
+  (state.consultants||[]).forEach(c=>{
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = `${c.initials || ''} — ${c.name || ''}`;
+    sel.appendChild(opt);
+  });
+  // keep selection or pick first
+  if(prev && [...sel.options].some(o=>o.value===prev)) sel.value = prev;
+  else if(sel.options.length) sel.value = sel.options[0].value;
+  state._jpSelectId = sel.value || null;
+
+  sel.onchange = ()=>{ state._jpSelectId = sel.value; pushHistory(); jpRenderHeader(); jpRenderWeekTabs(); jpRenderConsultantRota(); };
+  return sel;
+}
+
+function jpRenderHeader(){
+  const t= document.getElementById('jpTitle'); if(!t) return;
+  const cid = state._jpSelectId;
+  const c=(state.consultants||[]).find(x=>x.id===cid);
+  t.innerHTML = c ? `
+    <span class="pill"><span class="dot" style="background:${c.color||'#888'}"></span>
+    <span class="txt"><span class="init">${(c.initials||'').toUpperCase()}</span>
+    <span class="sep">—</span><span class="name">Jobplan for Dr ${c.name||''}</span></span></span>
+  ` : '';
+}
+
+function jpRenderWeekTabs(){
+  const wrap = document.getElementById('jpWeekTabs'); if(!wrap) return;
+  wrap.innerHTML='';
+  const max = state.cycleWeeks || 8;
+  for(let w=1; w<=max; w++){
+    const b=document.createElement('button');
+    b.textContent = `week ${w}`;
+    if(w===state.currentWeek) b.classList.add('active');
+    b.onclick = ()=>{ pushHistory(); state.currentWeek = w; jpRenderConsultantRota(); jpRenderWeekTabs(); };
+    wrap.appendChild(b);
+  }
+}
+
+function jpRenderConsultantRota(){
+  const wD = document.getElementById('jpWD'), wN = document.getElementById('jpWN');
+  if(!wD || !wN) return;
+  const cid = state._jpSelectId; if(!cid) { wD.innerHTML=''; wN.innerHTML=''; return; }
+
+  const showWE = !!state.jobsShowWeekends;
+  const daysIdx = showWE ? [1,2,3,4,5,6,7] : [1,2,3,4,5];
+  const dayNames = ["Area","Mon","Tue","Wed","Thu","Fri","Sat","Sun"].slice(0, daysIdx.length+1);
+
+  const mkHead = (tbl)=>{
+    tbl.innerHTML='';
+    const thead=document.createElement('thead'), tr=document.createElement('tr');
+    dayNames.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; tr.appendChild(th); });
+    thead.appendChild(tr); tbl.appendChild(thead);
+  };
+  const mkBody = (tbl, areas)=>{
+    const tbody=document.createElement('tbody');
+    areas.forEach(a=>{
+      const tr=document.createElement('tr');
+      const nameTd=document.createElement('td');
+      nameTd.innerHTML = `<span class="areachip" style="background:${a.color||'#eee'}">${a.name||''}</span>`;
+      tr.appendChild(nameTd);
+
+      daysIdx.forEach(d=>{
+        const td=document.createElement('td'); td.className='rota-cell';
+        const key=`${a.id}__week${state.currentWeek}__day${d}`;
+        const v = state.alloc[key];
+        if(v && v===cid){
+          const c=(state.consultants||[]).find(x=>x.id===cid);
+          td.innerHTML = c ? `<span class="pill"><span class="dot" style="background:${c.color||'#888'}"></span><span class="txt"><span class="init">${(c.initials||'').toUpperCase()}</span><span class="sep">—</span><span class="name">${c.name||''}</span></span></span>` : '';
+        } else {
+          td.innerHTML = '';
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody);
+  };
+
+  mkHead(wD); mkHead(wN);
+  const dcc = (state.areas||[]).filter(a=>a.type==="DCC");
+  const ndc = (state.areas||[]).filter(a=>a.type!=="DCC");
+  mkBody(wD, dcc);
+  mkBody(wN, ndc);
+  jpRenderHeader();
+}
+
+function renderJobplans(){
+  const sel = jpEnsureConsultantSelect();
+  const jpWE = document.getElementById('jpWeekends');
+  if(jpWE){
+    jpWE.checked = !!state.jobsShowWeekends;
+    jpWE.onchange = ()=>{ pushHistory(); state.jobsShowWeekends = jpWE.checked; jpRenderConsultantRota(); };
+  }
+  if(sel && !state._jpSelectId && sel.value) state._jpSelectId = sel.value;
+  jpRenderWeekTabs();
+  jpRenderConsultantRota();
+}
+// ===== END JOBPLANS HELPERS =====
+// ===== JOBPLANS HELPERS =====
+function jpEnsureConsultantSelect(){
+  const sel = document.getElementById('jpConsultantSelect');
+  if(!sel) return null;
+  const prev = state._jpSelectId;
+  sel.innerHTML = '';
+  (state.consultants||[]).forEach(c=>{
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = `${c.initials || ''} — ${c.name || ''}`;
+    sel.appendChild(opt);
+  });
+  if(prev && [...sel.options].some(o=>o.value===prev)) sel.value = prev;
+  else if(sel.options.length) sel.value = sel.options[0].value;
+  state._jpSelectId = sel.value || null;
+  sel.onchange = ()=>{ state._jpSelectId = sel.value; pushHistory(); jpRenderHeader(); jpRenderWeekTabs(); jpRenderConsultantRota(); };
+  return sel;
+}
+
+function jpRenderHeader(){
+  const t= document.getElementById('jpTitle'); if(!t) return;
+  const cid = state._jpSelectId;
+  const c=(state.consultants||[]).find(x=>x.id===cid);
+  t.innerHTML = c ? `
+    <span class="pill"><span class="dot" style="background:${c.color||'#888'}"></span>
+    <span class="txt"><span class="init">${(c.initials||'').toUpperCase()}</span>
+    <span class="sep">—</span><span class="name">Jobplan for Dr ${c.name||''}</span></span></span>
+  ` : '';
+}
+
+function jpRenderWeekTabs(){
+  const wrap = document.getElementById('jpWeekTabs'); if(!wrap) return;
+  wrap.innerHTML='';
+  const max = state.cycleWeeks || 8;
+  for(let w=1; w<=max; w++){
+    const b=document.createElement('button');
+    b.textContent = `week ${w}`;
+    if(w===state.currentWeek) b.classList.add('active');
+    b.onclick = ()=>{ pushHistory(); state.currentWeek = w; jpRenderConsultantRota(); jpRenderWeekTabs(); };
+    wrap.appendChild(b);
+  }
+}
+
+function jpRenderConsultantRota(){
+  const wD = document.getElementById('jpWD'), wN = document.getElementById('jpWN');
+  if(!wD || !wN) return;
+  const cid = state._jpSelectId; if(!cid) { wD.innerHTML=''; wN.innerHTML=''; return; }
+  const showWE = !!state.jobsShowWeekends;
+  const daysIdx = showWE ? [1,2,3,4,5,6,7] : [1,2,3,4,5];
+  const dayNames = ["Area","Mon","Tue","Wed","Thu","Fri","Sat","Sun"].slice(0, daysIdx.length+1);
+  const mkHead = (tbl)=>{
+    tbl.innerHTML='';
+    const thead=document.createElement('thead'), tr=document.createElement('tr');
+    dayNames.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; tr.appendChild(th); });
+    thead.appendChild(tr); tbl.appendChild(thead);
+  };
+  const mkBody = (tbl, areas)=>{
+    const tbody=document.createElement('tbody');
+    areas.forEach(a=>{
+      const tr=document.createElement('tr');
+      const nameTd=document.createElement('td');
+      nameTd.innerHTML = `<span class="areachip" style="background:${a.color||'#eee'}">${a.name||''}</span>`;
+      tr.appendChild(nameTd);
+      daysIdx.forEach(d=>{
+        const td=document.createElement('td'); td.className='rota-cell';
+        const key=`${a.id}__week${state.currentWeek}__day${d}`;
+        const v = state.alloc[key];
+        if(v && v===cid){
+          const c=(state.consultants||[]).find(x=>x.id===cid);
+          td.innerHTML = c ? `<span class="pill"><span class="dot" style="background:${c.color||'#888'}"></span><span class="txt"><span class="init">${(c.initials||'').toUpperCase()}</span><span class="sep">—</span><span class="name">${c.name||''}</span></span></span>` : '';
+        } else {
+          td.innerHTML = '';
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody);
+  };
+  mkHead(wD); mkHead(wN);
+  const dcc = (state.areas||[]).filter(a=>a.type==="DCC");
+  const ndc = (state.areas||[]).filter(a=>a.type!=="DCC");
+  mkBody(wD, dcc);
+  mkBody(wN, ndc);
+  jpRenderHeader();
+}
+
+function renderJobplans(){
+  const sel = jpEnsureConsultantSelect();
+  const jpWE = document.getElementById('jpWeekends');
+  if(jpWE){
+    jpWE.checked = !!state.jobsShowWeekends;
+    jpWE.onchange = ()=>{ pushHistory(); state.jobsShowWeekends = jpWE.checked; jpRenderConsultantRota(); };
+  }
+  if(sel && !state._jpSelectId && sel.value) state._jpSelectId = sel.value;
+  jpRenderWeekTabs();
+  jpRenderConsultantRota();
+}
+// ===== END JOBPLANS HELPERS ===== 
   renderAll();
 })();
+renderJobplans();
