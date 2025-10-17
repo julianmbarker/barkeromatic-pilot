@@ -1,14 +1,24 @@
+# netlify.toml
 [build]
+command = ""
+publish = "."
+
+# Make branch deploys predictable
+[build.environment]
+HUGO_VERSION = ""  # (ignore – just keeps Netlify happy)
+
+# Cache-bust everything so updates are visible immediately
+[[headers]]
+for = "/*"
+  [headers.values]
+  Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+
+# Context-specific settings (optional)
+[context.production]
   publish = "."
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+[context.deploy-preview]
+  publish = "."
 
-[[headers]]
-  for = "/*"
-  [headers.values]
-    Cache-Control = "no-store, no-cache, max-age=0, must-revalidate"
-    Pragma = "no-cache"
-    Expires = "0"
+[context.branch-deploy]
+  publish = "."
